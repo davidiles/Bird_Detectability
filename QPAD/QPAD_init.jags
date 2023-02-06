@@ -1,0 +1,53 @@
+
+    model {
+    
+    # ------------------------------
+    # Simulation
+    # ------------------------------
+    
+    # For each simulated bird, probability it has generated at least one detectable cue by end of time interval
+    for (i in 1:Nsim){
+    
+      # Simulate cueing for each bird in each time interval
+      for (j in 1:ntbin){
+      
+        # Expected number of cues produced during interval
+        lambda[i,j] <- phi*tbin_duration[j]*exp(-(sim_dist[i]/tau)^2)
+        
+        # Probability bird produces at least one detectable cue
+        p[i,j] <- 1 - exp(-lambda[i,j])
+        dc[i,j] ~ dbern(p[i,j]) # binary (was bird detected?)
+      }
+      
+      # Ensure that each bird only gets detected once
+      yy[i,1] <- dc[i,1]
+      for (j in 1:(ntbin-1)){
+        mx[i,j] <- max(dc[i,1:j]) # Max detection up to this time bin
+        yy[i,j+1] <- dc[i,j+1]*(1-mx[i,j]) # If bird was detected previously, set to zero (so we can sum yy in each distance/time bin)
+      }
+      
+    }
+    
+    # Sum up first detections in each time and distance bin
+    for (i in 1:nrbin){
+      for (j in 1:ntbin){
+        Ysim[i,j] <- sum(yy[r_from[i]:r_to[i],j])
+      }
+    }
+    
+    # -----------------------------------------------------
+    # Marginals
+    # -----------------------------------------------------
+    
+    for (i in 1:nrbin){
+      p_distance[i] <- sum(Ysim[i,1:ntbin])/sum(Ysim[1:nrbin,1:ntbin])
+    }
+    
+    for (j in 1:ntbin){
+      p_removal[j] <- sum(Ysim[1:nrbin,j])/sum(Ysim[1:nrbin,1:ntbin])
+    }
+    
+    dummy ~ dunif(0,1)
+  }
+    
+
