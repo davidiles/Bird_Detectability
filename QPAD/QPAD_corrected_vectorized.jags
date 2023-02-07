@@ -5,8 +5,8 @@
     # Priors
     # ------------------------------
     
-    phi ~ dunif(0,1)
-    tau ~ dunif(0,2)
+    phi ~ dunif(0,2)
+    tau ~ dunif(0,3)
     
     # ------------------------------
     # Simulation

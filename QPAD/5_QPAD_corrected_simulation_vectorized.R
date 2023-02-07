@@ -20,8 +20,8 @@ cat("
     # Priors
     # ------------------------------
     
-    phi ~ dunif(0,1)
-    tau ~ dunif(0,2)
+    phi ~ dunif(0,2)
+    tau ~ dunif(0,3)
     
     # ------------------------------
     # Simulation
@@ -135,16 +135,17 @@ rm(list=ls())
 
 results_df = data.frame()
 
-for (sim_rep in 30:100){
+for (sim_rep in 1:100){
+  
   #  for (tau_true in c(0.5,1.5)){
   #    for (phi_true in c(0.2,0.4)){
   
-  N = 10000 # Number of birds to place on landscape
+  N = 100000 # Number of birds to place on landscape (determines overall sample size in point count dataset)
   dim = 10 # landscape size (dim x dim landscape)
   Density_true = N/dim^2 
   
-  tau_true <- 1
-  phi_true <- 0.3
+  tau_true <- 0.7
+  phi_true <- 0.5
   
   # ------------------------------------
   # PART 1: GENERATE 'ACTUAL' DATA
@@ -231,6 +232,7 @@ for (sim_rep in 30:100){
   while (is.null(out)){
     
     out <- tryCatch({
+      
       # Plausible initial values
       phi_init = 0.2
       tau_init = 1.2
