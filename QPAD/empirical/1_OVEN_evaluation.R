@@ -250,3 +250,49 @@ out <- jags(data = jags_data,
             n.iter = 5000,
             n.burnin = 1000,
             parallel = TRUE)
+
+
+tauplot = ggplot()+
+  geom_violin(aes(x = 1, y = out$sims.list$tau), fill = "cornflowerblue",
+              draw_quantiles = c(0.05,0.5,0.95), col = "blue")+
+  geom_point(aes(x = 1, y = tau_MLE), col = "red", size = 3)+
+  geom_text(aes(x = 1.1, y = tau_MLE, label = "QPAD"), col = "red", size = 2,hjust = 0)+
+  
+  ylab("tau")+
+  xlab("")+
+  theme_bw()+
+  #scale_y_continuous(limits = c(50,100))+
+  scale_x_continuous(limits = c(0,2))+
+  ggtitle("tau / EDR")+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+phiplot = ggplot()+
+  geom_violin(aes(x = 1, y = out$sims.list$phi), fill = "cornflowerblue",
+              draw_quantiles = c(0.05,0.5,0.95), col = "blue")+
+  geom_point(aes(x = 1, y = phi_MLE), col = "red", size = 3)+
+  geom_text(aes(x = 1.1, y = phi_MLE, label = "QPAD"), col = "red", size = 2,hjust = 0)+
+  
+  ylab("phi")+
+  xlab("")+
+  theme_bw()+
+  #scale_y_continuous(limits = c(50,100))+
+  scale_x_continuous(limits = c(0,2))+
+  ggtitle("phi / cue rate")+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+compare_plot <- ggarrange(tauplot,phiplot,ncol = 2) %>%
+  annotate_figure(top = "OVEN\n\n")
+compare_plot
+
+
+png("OVEN.png", width = 6, height = 4, units = "in", res = 500)
+print(compare_plot)
+dev.off()
+
+
+
+plot(out$sims.list$phi ~ out$sims.list$tau, xlab = "tau", ylab = "phi")

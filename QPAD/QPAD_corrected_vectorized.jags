@@ -4,11 +4,9 @@
     # ------------------------------
     # Priors
     # ------------------------------
-    dummy ~ dunif(0,1)
-    phi ~ dunif(0,2)
-    tau ~ dunif(0,3)
-    #phi <- 0.5
-    #tau <- 1
+    
+    phi ~ dunif(0,5)
+    tau ~ dunif(0,5)
     
     # ------------------------------
     # Simulation
@@ -20,12 +18,16 @@
       # Simulate cueing for each bird in each time interval
       for (j in 1:ntint){
       
-        # Expected number of cues produced up to end of interval
-        #lambda[i,j] <- phi*tint[j]*exp(-(sim_dist[i]/tau)^2)
+        # ************************************
+        # Expected number of cues produced = phi*tint[j]
+        # Expected number of detectable cues = lambda = phi*tint[j]*exp(-(sim_dist[i]/tau)^2)
+        # Probability of getting zero detectable cues (under Poisson) = exp(-lambda)
+        # Probability of getting at least 1 detectable cue = 1-exp(-lambda)
+        # ************************************
         
-        # Probability bird produces at least one detectable cue by end of interval
-        #p[i,j] <- 1 - exp(-lambda[i,j])
+        # Probability bird produces at least one detectable cue by end of interval (product of expected number of cues and probability each cue is detected)
         p[i,j] <- 1 - exp(-phi*tint[j]*exp(-(sim_dist[i]/tau)^2))
+        
       }
     }
     
@@ -36,7 +38,7 @@
       }
     }
    
-   # Difference to calculate cell probabilities
+   # Difference within each distance bin to calculate cell probabilities
     for (i in 1:nrint){
       Ysim_matrix[i,1] <- ET[i,1]
       for (j in 2:ntint){
@@ -51,6 +53,7 @@
       
     # -----------------------------------------------------
     # Use relative proportions for detectability modeling
+    # Note that JAGS automatically normalizes Ysim_vectorized (Ysim_vectorized/sum(Ysim_vectorized)) so that probabilities sum to 1
     # -----------------------------------------------------
     
     Y_vectorized[1:n_bins_vectorized] ~ dmulti(Ysim_vectorized[],N_det)
