@@ -1,18 +1,24 @@
-library(bSims)
-library(ggpubr)
+# ********************************************************
+# Simulates point count transcriptions based on 'first detections',
+# when observers are making their detections based on individual bird cues
+# and detection probability depends on distance between birds and observers
+#
+# This script only uses the marginal counts in distance and time bins
+# ********************************************************
+
 library(tidyverse)
+library(ggpubr)
 library(detect)
 library(jagsUI)
 library(reshape2)
 
-
 setwd("~/1_Work/Bird_Detectability/QPAD")
 
 # ----------------------------------------
-# Script to fit model
+# JAGS script to fit model
 # ----------------------------------------
 
-sink("QPAD_corrected_vectorized.jags")
+sink("analysis_distance_time_marginal.jags")
 cat("
     model {
     
@@ -20,21 +26,21 @@ cat("
     # Priors
     # ------------------------------
     
-    phi ~ dunif(0,5)
+    # Relative wide, flat priors
+    phi ~ dunif(0,2)
     tau ~ dunif(0,5)
     
     # ------------------------------
     # Simulation
     # ------------------------------
     
-    # For each simulated bird, probability it has generated at least one detectable cue by end of time interval
+    # For each simulated bird, calculate probability it has generated at least one detectable cue by end of time interval
     for (i in 1:Nsim){
     
-      # Simulate cueing for each bird in each time interval
       for (j in 1:ntint){
       
         # ************************************
-        # Expected number of cues produced = phi*tint[j]
+        # Expected number of cues produced per bird = phi*tint[j]
         # Expected number of detectable cues = lambda = phi*tint[j]*exp(-(sim_dist[i]/tau)^2)
         # Probability of getting zero detectable cues (under Poisson) = exp(-lambda)
         # Probability of getting at least 1 detectable cue = 1-exp(-lambda)
@@ -46,7 +52,7 @@ cat("
       }
     }
     
-   # Sum up number of detected birds in each time and distance bin (this is sort of equivalent to the CDF)
+   # Sum up number of detected birds in each time and distance bin (this is proportional to the CDF)
     for (i in 1:nrint){
       for (j in 1:ntint){
         ET[i,j] <- sum(p[r_from[i]:r_to[i],j])
@@ -61,18 +67,34 @@ cat("
       }
     } 
     
-    # Place counts in correct vectorized bins
-    for (i in 1:n_bins_vectorized){
-        Ysim_vectorized[i] <- Ysim_matrix[Y_rint_numeric[i],Y_tint_numeric[i]]
+    # Calculate cell probabilities for removal modeling
+    for (j in 1:ntint){
+        Ysim_tint[j] <- sum(Ysim_matrix[1:nrint,j])
+    }
+      
+    # Calculate cell probabilities for distance modeling
+    for (i in 1:nrint){
+        Ysim_rint[i] <- sum(Ysim_matrix[i,1:ntint])
       }
       
     # -----------------------------------------------------
     # Use relative proportions for detectability modeling
-    # Note that JAGS automatically normalizes Ysim_vectorized (Ysim_vectorized/sum(Ysim_vectorized)) so that probabilities sum to 1
+    # Note that JAGS automatically normalizes 'probability' vectors
     # -----------------------------------------------------
     
-    Y_vectorized[1:n_bins_vectorized] ~ dmulti(Ysim_vectorized[],N_det)
+    # Removal modeling
+    Y_removal[1,1:ntint] ~ dmulti(Ysim_tint[],N_det)
     
+    # Distance modeling
+    Y_distance[1,1:nrint] ~ dmulti(Ysim_rint[],N_det)
+    
+    # -----------------------------------------------------
+    # Density
+    # -----------------------------------------------------
+     
+    C <- sum(Ysim_matrix[1:nrint,1:ntint])/Nsim
+    Y_corrected <- N_det/C
+    Density <- Y_corrected/(pi*pow(trunc_dist,2))
   }
     
 ",fill = TRUE)
@@ -82,14 +104,18 @@ rm(list=ls())
 
 results_df = data.frame()
 
-for (sim_rep in 1:100){
+# Conduct repeated simulations to evaluate properties of estimator
+for (sim_rep in 1:25){
+  
+  # Simulate a huge number of birds 
+  # - since no covariates are being included, this is equivalent to conducting many point counts
   
   N = 100000 # Number of birds to place on landscape (determines overall sample size in point count dataset)
   dim = 10 # landscape size (dim x dim landscape)
   Density_true = N/dim^2 
   
-  tau_true <- 0.8
-  phi_true <- 0.5
+  tau_true <- 1.5 # EDR per cue - not equivalent to EDR per bird
+  phi_true <- 0.5 # cue rate (per bird)
   
   # ------------------------------------
   # PART 1: GENERATE 'ACTUAL' DATA
@@ -121,21 +147,13 @@ for (sim_rep in 1:100){
   dat <- subset(cues,detected == 1)
   dat <- dat[!duplicated(dat$bird_id),]
   
-  # Transcription: when distance is fixed
+  # Transcription
   tint <- c(3,5,10)
   rint <- c(0.5,1,Inf)
   
   dat$tint <- cut(dat$time,c(0,tint))
   dat$rint <- cut(dat$dist,c(0,rint))
   Y = table(dat$rint,dat$tint)
-  
-  # Change to vector format (so dcat() can work in JAGS)
-  Y_vec <- reshape2::melt(Y) %>%
-    rename(rint = Var1, tint = Var2, Y = value)
-  
-  Y_rint_numeric <- factor(Y_vec$rint) %>% as.numeric()
-  Y_tint_numeric <- factor(Y_vec$tint) %>% as.numeric()
-  Y_vectorized <- Y_vec$Y
   
   # ------------------------------------
   # PART 2: FIT MODELS WITH STANDARD QPAD
@@ -155,55 +173,61 @@ for (sim_rep in 1:100){
   fit.p <- cmulti.fit(Y_removal,D_removal, type = "rem")
   phi_MLE = exp(fit.p$coefficients)
   
+  # Estimate density
+  A_hat = pi*tau_MLE^2
+  p_hat = 1-exp(-max(tint)*phi_MLE)
+  Density_MLE <- sum(Y)/(A_hat*p_hat)
+  
   # --------------------------------------
-  # Data augmentation (used for integrating across distance bands)
+  # Data augmentation (just used for numerical integration in JAGS)
   # --------------------------------------
   
-  dim = 10    # landscape size (dim x dim landscape)
-  Density = 5 
-  Nsim = dim^2 * Density
+  trunc_dist = 5         # How far do we want to integrate over?  Select a large distance (relative to EDR) for unlimited distance point counts
+  dim = 5                # landscape size (dim x dim landscape)
+  Nsim_max = 2000        # Maximum number of simulated birds to include
   
-  sim_birds <- data.frame(bird_id = 1:Nsim,
-                          x = runif(Nsim,-dim/2,dim/2),
-                          y = runif(Nsim,-dim/2,dim/2))
+  sim_birds <- data.frame(x = runif(Nsim_max,-dim,dim),
+                          y = runif(Nsim_max,-dim,dim))
+  
   
   # Random distances to observer
   sim_birds$dist <- sqrt(sim_birds$x^2 + sim_birds$y^2)
+  sim_birds <- subset(sim_birds, dist <= trunc_dist)
   sim_birds$rint <- cut(sim_birds$dist,c(0,rint))
   
   # Sort simulated sim_birds by distance
   sim_birds <- sim_birds %>% arrange(dist)
+  sim_birds$bird_id <- 1:nrow(sim_birds)
+  Nsim <- nrow(sim_birds)
   
   # Group simulated birds into distance bins
   sim_birds$rint <- cut(sim_birds$dist,c(0,rint))
   sim_birds$rint_num <- sim_birds$rint %>% factor() %>% as.numeric()
   
-  # For each distance bin, store first and last bird in that bin
+  # For each distance bin, store first and last 'simulated' bird in that bin
   r_from <- r_to <- rint*NA
   for (i in 1:length(rint)){
     r_from[i] <- min(which(sim_birds$rint_num == i))
     r_to[i] <- max(which(sim_birds$rint_num == i))
   }
   
+  # --------------------------------------
+  # ANALYZE DATA IN JAGS
+  # --------------------------------------
   
-  # Change to vector format (so dcat() can work in JAGS)
-  Y_vec <- reshape2::melt(Y) %>%
-    rename(rint = Var1, tint = Var2, Y = value)
-  
-  Y_rint_numeric <- factor(Y_vec$rint) %>% as.numeric()
-  Y_tint_numeric <- factor(Y_vec$tint) %>% as.numeric()
-  Y_vectorized <- Y_vec$Y
-  Y_vectorized[1] <- Y_vectorized[1] - 20
-  
-  
+  # Data in list for JAGS
   jags_data <- list(
     
     pi = pi,
     
+    # Vectorized data
+    N_det = sum(Y),
+    Y_removal = Y_removal,
+    Y_distance = Y_distance,
+    
     # Time bin information
     tint = tint,
     ntint = length(tint),
-    tint_duration = diff(c(0,tint)),
     
     # Distance bin information
     nrint = length(rint),
@@ -211,33 +235,24 @@ for (sim_rep in 1:100){
     # Data augmentation
     Nsim = nrow(sim_birds),
     sim_dist = sim_birds$dist,
-    
-    # Distance that each simulated bird belongs to
-    r_from = r_from,
-    r_to = r_to,
-    
-    # Vectorized data
-    N_det = sum(Y_vectorized),
-    Y_vectorized = Y_vectorized,
-    n_bins_vectorized = length(Y_rint_numeric),
-    Y_rint_numeric = Y_rint_numeric,
-    Y_tint_numeric = Y_tint_numeric
+    trunc_dist = trunc_dist,
+    r_from = r_from, # for indexing simulated birds into distance bins
+    r_to = r_to      # for indexing simulated birds into distance bins
   )
   
   # Fit model
   out <- jags(data = jags_data,
-              model.file =  "QPAD_corrected_vectorized.jags",
-              parameters.to.save = c("phi","tau"),
+              model.file =  "analysis_distance_time_marginal.jags",
+              parameters.to.save = c("phi","tau","Density"),
               n.chains = 3,
               n.thin = 1,
               n.iter = 5000,
               n.burnin = 1000,
               parallel = TRUE)
   
-  #out_3000 = out
   
   # ----------------------------------
-  # STORE RESULTS
+  # STORE RESULTS FOR THIS SIMULATION
   # ----------------------------------
   
   results_df = rbind(results_df,
@@ -250,7 +265,7 @@ for (sim_rep in 1:100){
                                 
                                 tau_uncorrected = tau_MLE,
                                 phi_uncorrected = phi_MLE,
-                                #Density_uncorrected = Density_MLE,
+                                Density_uncorrected = Density_MLE,
                                 
                                 tau_est_q50 = out$q50$tau,
                                 tau_est_q025 = out$q2.5$tau,
@@ -258,12 +273,19 @@ for (sim_rep in 1:100){
                                 
                                 phi_est_q50 = out$q50$phi,
                                 phi_est_q025 = out$q2.5$phi,
-                                phi_est_q975 = out$q97.5$phi
+                                phi_est_q975 = out$q97.5$phi,
+                                
+                                Density_est_q50 = out$q50$Density,
+                                Density_est_q025 = out$q2.5$Density,
+                                Density_est_q975 = out$q97.5$Density
+                                
                      ))
   
   # ----------------------------------
   # PLOT RESULTS
   # ----------------------------------
+  
+  # Mean results across repeated simulations
   mean_df <- results_df %>%
     group_by(tau_label, phi_label) %>%
     summarize(tau_true = mean(tau_true),
@@ -271,49 +293,71 @@ for (sim_rep in 1:100){
               mean_tau_corrected = mean(tau_est_q50),
               mean_tau_uncorrected = mean(tau_uncorrected),
               mean_phi_corrected = mean(phi_est_q50),
-              mean_phi_uncorrected = mean(phi_uncorrected)
+              mean_phi_uncorrected = mean(phi_uncorrected),
+              mean_Density_corrected = mean(Density_est_q50),
+              mean_Density_uncorrected = mean(Density_uncorrected)
     )
   
   tau_plot <- ggplot(data = results_df, aes(x = sim_rep, y = tau_est_q50, ymin = tau_est_q025, ymax = tau_est_q975))+
-    geom_hline(data = results_df, aes(yintercept = tau_true), col = "dodgerblue", size = 2, alpha = 0.5)+
-    geom_errorbar(width = 0, aes(col = "Corrected"))+
-    geom_point(aes(col = "Corrected"))+
-    geom_point(data = results_df, aes(x = sim_rep, y = tau_uncorrected, col = "QPAD"))+
+    geom_hline(data = results_df, aes(yintercept = tau_true, col = "Truth"), size = 1)+
+    #geom_errorbar(width = 0, aes(col = "Joint"))+
+    geom_point(aes(col = "Joint"))+
+    geom_point(data = results_df, aes(x = sim_rep, y = tau_uncorrected, col = "Indep"))+
     
     # Mean corrected estimate
-    geom_hline(data = mean_df, aes(yintercept = mean_tau_corrected, col = "Corrected"), linetype = 2)+
+    geom_hline(data = mean_df, aes(yintercept = mean_tau_corrected, col = "Joint"), linetype = 2)+
     
     # Mean uncorrected estimate
-    geom_hline(data = mean_df, aes(yintercept = mean_tau_uncorrected, col = "QPAD"), linetype = 2)+
+    geom_hline(data = mean_df, aes(yintercept = mean_tau_uncorrected, col = "Indep"), linetype = 2)+
     
-    scale_color_manual(values = c("black","orangered"), name = "Estimate")+
-    facet_grid(phi_label~tau_label)+
-    ggtitle("Estimates of EDR")+
+    scale_color_manual(values = c("orangered","dodgerblue","black"), name = "")+
+    ggtitle("Estimates of Tau")+
     xlab("Simulation #")+
-    ylab("EDR")+
+    ylab("Tau")+
     theme_bw()
   #tau_plot
   
   phi_plot <- ggplot(data = results_df, aes(x = sim_rep, y = phi_est_q50, ymin = phi_est_q025, ymax = phi_est_q975))+
-    geom_hline(data = results_df, aes(yintercept = phi_true), col = "dodgerblue", size = 2, alpha = 0.5)+
-    geom_errorbar(width = 0, aes(col = "Corrected"), alpha = 0.5)+
-    geom_point(aes(col = "Corrected"))+
-    geom_point(data = results_df, aes(x = sim_rep, y = phi_uncorrected, col = "QPAD"))+
+    geom_hline(data = results_df, aes(yintercept = phi_true, col = "Truth"),  size = 1)+
+    #geom_errorbar(width = 0, aes(col = "Joint"), alpha = 0.5)+
+    geom_point(aes(col = "Joint"))+
+    geom_point(data = results_df, aes(x = sim_rep, y = phi_uncorrected, col = "Indep"))+
     
     # Mean corrected estimate
-    geom_hline(data = mean_df, aes(yintercept = mean_phi_corrected, col = "Corrected"), linetype = 2)+
+    geom_hline(data = mean_df, aes(yintercept = mean_phi_corrected, col = "Joint"), linetype = 2)+
     
     # Mean uncorrected estimate
-    geom_hline(data = mean_df, aes(yintercept = mean_phi_uncorrected, col = "QPAD"), linetype = 2)+
+    geom_hline(data = mean_df, aes(yintercept = mean_phi_uncorrected, col = "Indep"), linetype = 2)+
     
-    scale_color_manual(values = c("black","orangered"), name = "Estimate")+
-    facet_grid(phi_label~tau_label)+
-    ggtitle("Estimates of Cue Rate")+
+    scale_color_manual(values = c("orangered","dodgerblue","black"), name = "")+
+    ggtitle("Estimates of Phi")+
     xlab("Simulation #")+
-    ylab("Cue rate")+
+    ylab("Phi")+
     theme_bw()
   
-  estimate_plot <- ggarrange(tau_plot,phi_plot,nrow=2)
+  Density_plot <- ggplot(data = results_df, aes(x = sim_rep, y = Density_est_q50, ymin = Density_est_q025, ymax = Density_est_q975))+
+    geom_hline(data = results_df, aes(yintercept = Density_true, col = "Truth"), size = 1)+
+    #geom_errorbar(width = 0, aes(col = "Joint"), alpha = 0.5)+
+    geom_point(aes(col = "Joint"))+
+    geom_point(data = results_df, aes(x = sim_rep, y = Density_uncorrected, col = "Indep"))+
+    
+    # Mean Joint estimate
+    geom_hline(data = mean_df, aes(yintercept = mean_Density_corrected, col = "Joint"), linetype = 2)+
+    
+    # Mean unJoint estimate
+    geom_hline(data = mean_df, aes(yintercept = mean_Density_uncorrected, col = "Indep"), linetype = 2)+
+    
+    scale_color_manual(values = c("orangered","dodgerblue","black"), name = "")+
+    ggtitle("Estimates of Density")+
+    xlab("Simulation #")+
+    ylab("Density")+
+    theme_bw()
+  
+  estimate_plot <- ggarrange(tau_plot,phi_plot,Density_plot,nrow=3)
+  estimate_plot <- annotate_figure(estimate_plot, top = paste0("Tau = ",tau_true, " , Phi = ", phi_true))
   print(estimate_plot)  
 }
 
+png(paste0("figures/SimResults_Marginals_tau_",tau_true,"_phi_",phi_true,".png"),width=6,height=8,units="in",res=500)
+print(estimate_plot)
+dev.off()

@@ -7,21 +7,20 @@
 # - illustrates that estimates are biased, unless each bird can only make a single cue during point counts
 # ******************************************************************
 
-library(bSims)
 library(ggpubr)
 library(tidyverse)
 library(detect)
 
 rm(list=ls())
 
-N = 10000 # Number of birds to place on landscape (select a high number to allow sufficient sample size)
-dim = 10 # landscape size (metres)
+N = 50000 # Number of birds to place on landscape (select a high number to allow sufficient sample size)
+dim = 1000 # landscape size (metres)
 Density = N/dim^2 
-
+Density
 results_df <- data.frame()
 
-for (tau in seq(0.5,2,0.25)){
-  for (phi in c(0.2,1)){
+for (tau in seq(50,200,50)){
+  for (phi in c(0.1,1)){
     for (sim_rep in 1:1000){
       
       print(sim_rep)
@@ -74,7 +73,7 @@ for (tau in seq(0.5,2,0.25)){
       # Transcription: distance and time bins
       # ------------------------------------
       
-      rint <- c(0.5,1,Inf)
+      rint <- c(50,100,Inf)
       tint <- c(3,5,10)
       
       # Separate into distance and time bins
@@ -137,36 +136,38 @@ for (tau in seq(0.5,2,0.25)){
 # --------------------------------------------------------------
 # Plot results for a single combination of tau and phi
 # --------------------------------------------------------------
-tau_to_plot <- 1
-phi_to_plot <- 0.2
+tau_to_plot <- 100
+phi_to_plot <- 0.1
 results_to_plot <- subset(results_df, tau == tau_to_plot & phi == phi_to_plot)
 
 EDR_bias <- median((results_to_plot$tau_MLE - tau_to_plot)/tau_to_plot * 100) %>% round(1)
 plot_tau <- ggplot(results_to_plot,aes(x = sim_rep, y = tau_MLE))+
-  geom_point(col="gray80")+
-  geom_hline(yintercept = tau_to_plot, size=2,col="dodgerblue",alpha=0.5)+
-  geom_hline(yintercept = mean(results_to_plot$tau_MLE), linetype = 2)+
-  ylab("EDR (in 100s of metres)")+
+  geom_point(col="orangered")+
+  geom_hline(yintercept = tau_to_plot*0.8,col="transparent")+
+  geom_hline(yintercept = tau_to_plot,col="black")+
+  geom_hline(yintercept = mean(results_to_plot$tau_MLE), linetype = 2, col = "orangered")+
+  ylab("Tau (metres)")+
   xlab("Simulation #")+
-  ggtitle(paste0("EDR\nMedian bias = +",EDR_bias,"%"))+
+  ggtitle(paste0("Tau\nMedian bias = +",EDR_bias,"%"))+
   theme_bw()
 
 cuerate_bias <- median((results_to_plot$phi_MLE - phi_to_plot)/phi_to_plot * 100) %>% round(1)
 plot_phi <- ggplot(results_to_plot,aes(x = sim_rep, y = phi_MLE))+
-  geom_point(col="gray80")+
-  geom_hline(yintercept = phi_to_plot, size=2,col="dodgerblue",alpha=0.5)+
-  geom_hline(yintercept = mean(results_to_plot$phi_MLE), linetype = 2)+
-  ylab("Cue rate (per minute)")+
+  geom_point(col="orangered")+
+  geom_hline(yintercept = phi_to_plot/0.8,col="transparent")+
+  geom_hline(yintercept = phi_to_plot,col="black")+
+  geom_hline(yintercept = mean(results_to_plot$phi_MLE), linetype = 2, col = "orangered")+
+  ylab("Phi (cues per minute)")+
   xlab("Simulation #")+
-  ggtitle(paste0("Cue rate\nMedian bias = ",cuerate_bias,"%"))+
+  ggtitle(paste0("Phi\nMedian bias = ",cuerate_bias,"%"))+
   theme_bw()
 
 Density_bias <- median((results_to_plot$D_hat - Density)/Density * 100) %>% round(1)
 plot_Density <- ggplot(results_to_plot,aes(x = sim_rep, y = D_hat))+
-  geom_point(col="gray80")+
-  geom_hline(yintercept = Density, size=2,col="dodgerblue",alpha=0.5)+
-  geom_hline(yintercept = median(results_to_plot$D_hat), linetype = 2)+
-  coord_cartesian(ylim=c(0,quantile(results_to_plot$D_hat,0.9)))+
+  geom_point(col="orangered")+
+  geom_hline(yintercept = median(results_to_plot$D_hat)*0.8,col="transparent")+
+  geom_hline(yintercept = Density,col="black")+
+  geom_hline(yintercept = median(results_to_plot$D_hat), linetype = 2, col = "orangered")+
   ylab("Density")+
   xlab("Simulation #")+
   ggtitle("Density")+
@@ -175,13 +176,13 @@ plot_Density <- ggplot(results_to_plot,aes(x = sim_rep, y = D_hat))+
 plot_Density
 
 estimate_plot <- ggarrange(plot_tau,plot_phi,plot_Density, nrow=3)
+estimate_plot <- annotate_figure(estimate_plot, top = paste0("True tau = ",tau_to_plot, " , True phi = ", phi_to_plot))
 print(estimate_plot)
 
 
 
-
 # --------------------------------------------------------------
-# Plot median results across multiple combinations of tau and phi
+# Plot median results across combinations of tau and phi
 # --------------------------------------------------------------
 
 results_df$percent_bias_Density <- (results_df$D_hat - Density)/Density * 100
@@ -196,10 +197,10 @@ plot_Density_bias <- ggplot(data = results_summarized,
                             aes(x = tau, y = percent_bias_Density, col = factor(phi)))+
   geom_line()+
   theme_bw()+
-  scale_color_manual(name = "Cue rate\n(per minute)", values = c("dodgerblue","orangered"))+
+  scale_color_manual(name = "Phi", values = c("dodgerblue","orangered"))+
   ylab("Percent bias in density estimate")+
-  xlab("EDR (100s of metres)")+
-  ggtitle("Bias in density estimates across\ncombinations of EDR and cue rate")+
+  xlab("Tau")+
+  ggtitle("Bias in density estimates across\ncombinations of Tau and Phi")+
   scale_y_continuous(limits = c(0,max(results_summarized$percent_bias_Density)))
 
 plot_Density_bias

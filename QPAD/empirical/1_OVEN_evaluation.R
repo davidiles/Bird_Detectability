@@ -14,8 +14,8 @@ rm(list=ls())
 # ----------------------------------------
 # Read OVEN data
 # ----------------------------------------
-file <- "BLPWdetectionhistories.xlsx"
-#file <- "OVENdetectionhistory.xlsx"
+#file <- "BLPWdetectionhistories.xlsx"
+file <- "OVENdetectionhistory.xlsx"
 dat <- read_xlsx(file) %>%
   rename(tbin = 10, dbin = 11)
 
