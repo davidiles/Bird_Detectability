@@ -19,9 +19,10 @@ Density = N/dim^2
 Density
 results_df <- data.frame()
 
+# Conduct simulations across a range of tau and phi
 for (tau in seq(50,200,50)){
   for (phi in c(0.1,1)){
-    for (sim_rep in 1:1000){
+    for (sim_rep in 1:10){
       
       print(sim_rep)
       
@@ -181,26 +182,26 @@ print(estimate_plot)
 
 
 
-# --------------------------------------------------------------
-# Plot median results across combinations of tau and phi
-# --------------------------------------------------------------
-
-results_df$percent_bias_Density <- (results_df$D_hat - Density)/Density * 100
-results_summarized <- results_df %>%
-  group_by(tau,phi) %>%
-  summarize(percent_bias_Density = median(percent_bias_Density),
-            D_hat = median(D_hat),
-            tau_MLE = median(tau_MLE),
-            phi_MLE = median(phi_MLE))
-
-plot_Density_bias <- ggplot(data = results_summarized, 
-                            aes(x = tau, y = percent_bias_Density, col = factor(phi)))+
-  geom_line()+
-  theme_bw()+
-  scale_color_manual(name = "Phi", values = c("dodgerblue","orangered"))+
-  ylab("Percent bias in density estimate")+
-  xlab("Tau")+
-  ggtitle("Bias in density estimates across\ncombinations of Tau and Phi")+
-  scale_y_continuous(limits = c(0,max(results_summarized$percent_bias_Density)))
-
-plot_Density_bias
+# # --------------------------------------------------------------
+# # Plot median results across combinations of tau and phi
+# # --------------------------------------------------------------
+# 
+# results_df$percent_bias_Density <- (results_df$D_hat - Density)/Density * 100
+# results_summarized <- results_df %>%
+#   group_by(tau,phi) %>%
+#   summarize(percent_bias_Density = median(percent_bias_Density),
+#             D_hat = median(D_hat),
+#             tau_MLE = median(tau_MLE),
+#             phi_MLE = median(phi_MLE))
+# 
+# plot_Density_bias <- ggplot(data = results_summarized, 
+#                             aes(x = tau, y = percent_bias_Density, col = factor(phi)))+
+#   geom_line()+
+#   theme_bw()+
+#   scale_color_manual(name = "Phi", values = c("dodgerblue","orangered"))+
+#   ylab("Percent bias in density estimate")+
+#   xlab("Tau")+
+#   ggtitle("Bias in density estimates across\ncombinations of Tau and Phi")+
+#   scale_y_continuous(limits = c(0,max(results_summarized$percent_bias_Density)))
+# 
+# plot_Density_bias
