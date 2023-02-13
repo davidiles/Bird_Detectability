@@ -1,6 +1,7 @@
 library(tidyverse)
 library(jagsUI)
 library(ggpubr)
+library(detect)
 
 sink("analysis_integrated.jags")
 cat("
@@ -10,8 +11,8 @@ cat("
     # Priors
     # ------------------------------
     
-    # Relative wide, flat priors
-    phi ~ dunif(0,2)
+    # Relatively wide, flat priors
+    phi ~ dunif(0,5)
     tau ~ dunif(0,5)
     
     # ------------------------------
@@ -26,19 +27,28 @@ cat("
       
       # Sum within each distance bin to calculate binned CDF
       for (i in 1:nrint){
-        CDF_binned[i,j] <- sum(CDF[rint_indices[i]:rint_indices[i+1],j])
+        CDF_binned[i,j] <- sum(CDF[1:rint_indices[i+1],j])
       }
     }
     
-    # Difference to calculate multinomial cell probabilities
-    for (i in 1:nrint){
-      p_matrix[i,1] <- CDF_binned[i,1]
-      for (j in 2:ntint){
-        p_matrix[i,j] <- CDF_binned[i,j] - sum(CDF_binned[i,(j-1)])
-      }
-    } 
+    # --------------------------------------------------------
+    # Difference CDF to calculate multinomial cell probabilities
+    # --------------------------------------------------------
     
+    tmp1[1,1:ntint] <- CDF_binned[1,1:ntint]
+    for (i in 2:nrint){
+      tmp1[i,1:ntint] <- CDF_binned[i,1:ntint] - CDF_binned[i-1,1:ntint]
+    }
+    
+    p_matrix[1:nrint,1] <- tmp1[1:nrint,1]
+    for (j in 2:ntint){
+      p_matrix[1:nrint,j] <- tmp1[1:nrint,j] - tmp1[1:nrint,j-1]
+    }
+    
+    # --------------------------------------------------------
     # Place  in vectorized cells for use with dmulti()
+    # --------------------------------------------------------
+    
     for (i in 1:n_bins_vectorized){
         p_vectorized[i] <- p_matrix[Y_rint_numeric[i],Y_tint_numeric[i]]
     }
@@ -70,6 +80,10 @@ results_df = data.frame()
 
 for (sim_rep in 1:1000){
   
+  # ******************************************
+  # PART 1: SIMULATE DATA
+  # ******************************************
+  
   set.seed(sim_rep)
   
   tau_true = 0.6
@@ -100,7 +114,7 @@ for (sim_rep in 1:1000){
   # Simulate bird cues, based on phi_true
   # ------------------------------------
   
-  cues <- matrix(NA, nrow=N, ncol = 10)
+  cues <- matrix(NA, nrow=N, ncol = 50)
   for (bird_id in 1:N) cues[bird_id,] <- cumsum(rexp(ncol(cues),phi_true))
   cues <- cues %>% 
     reshape2::melt() %>% 
@@ -128,8 +142,8 @@ for (sim_rep in 1:1000){
   # Transcription: distance and time bins
   # ------------------------------------
   
-  rint <- c(0.5,1,Inf)
-  tint <- c(3,5,10)
+  rint <- c(0.5,1,2)
+  tint <- seq(1,10,1) #c(3,5)
   nrint <- length(rint)
   ntint <- length(tint)
   
@@ -142,13 +156,39 @@ for (sim_rep in 1:1000){
   
   Y # Data to analyze
   
-  # ------------------------------------
-  # Analysis
-  # ------------------------------------
+  # ******************************************
+  # PART 2: FIT MODELS WITH STANDARD QPAD
+  # ******************************************
   
-  # Numerical integration (at midpoints)
-  max_dist = dim/2 # Maximum distance for integration
-  bins <- seq(0,max_dist,length.out = 1500) # Large number of bins for better approximation (but slower)
+  # Distance model
+  Y_distance = matrix(rowSums(Y),1)
+  D_distance = matrix(rint,1)
+  
+  # Removal model
+  Y_removal = matrix(colSums(Y),1)
+  D_removal = matrix(tint,1)
+  
+  #fit.q <- cmulti.fit(Y_distance,D_distance, type = "dis")
+  #tau_MLE = exp(fit.q$coefficients)
+  
+  #fit.p <- cmulti.fit(Y_removal,D_removal, type = "rem")
+  #phi_MLE = exp(fit.p$coefficients)
+  
+  # Estimate density
+  #A_hat = pi*tau_MLE^2
+  #p_hat = 1-exp(-max(tint)*phi_MLE)
+  #Density_MLE <- sum(Y)/(A_hat*p_hat)
+  
+  # ******************************************
+  # PART 3: JOINT ANALYSIS IN JAGS
+  # ******************************************
+  
+  # Prepare for numerical integration (at midpoints)
+  
+   # Maximum distance for integration
+  if (max(rint) != Inf) max_dist = max(rint) else max_dist = dim/2 # If fixed radius point count
+  
+  bins <- seq(0,max_dist,length.out = 100) # Large number of bins for better approximation (but slower)
   midpoints <- bins[-length(bins)] + diff(bins)
   nbins <- length(bins)
   
@@ -156,39 +196,43 @@ for (sim_rep in 1:1000){
   rint_indices <- c(1)
   for (i in 1:nrint) rint_indices[i+1] = max(which(midpoints < rint[i]))
   
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   # Code below just confirms that numerical integration equations are approximately correct
-  # Ysum_expected = matrix(NA, nrow=nrint, ncol = ntint)
-  # 
-  # for (j in 1:ntint){
-  #   Total_detected = c()
-  #   N_tot = c()
-  #   A_tot = c()
-  #   
-  #   for (i in 1:(nbins-1)){
-  #     
-  #     P_bin = 1-exp(-phi_true*tint[j]*exp(-midpoints[i]^2/tau_true^2)) # Approximate probability each bird in bin is detected by end of interval
-  #     A_bin = (pi * bins[i+1]^2) - (pi*bins[i]^2)
-  #     N_bin = A_bin*Density
-  #     Total_detected_bin = N_bin * P_bin
-  #     Total_detected = c(Total_detected,Total_detected_bin)
-  #   }
-  #   
-  #   for (k in 1:nrint){
-  #     Ysum_expected[k,j] <- sum(Total_detected[rint_indices[k]:rint_indices[k+1]])
-  #   }
-  #   
-  # }
-  # 
-  # Ysim_matrix <- Y*NA
-  # 
-  # for (i in 1:nrint){
-  #   Ysim_matrix[i,1] <- Ysum_expected[i,1]
-  #   for (j in 2:ntint){
-  #     Ysim_matrix[i,j] <- Ysum_expected[i,j] - sum(Ysum_expected[i,(j-1)])
-  #   }
-  # } 
-  # Ysim_matrix/sum(Ysim_matrix)
-  # Y/sum(Y)
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  Ysum_expected = matrix(NA, nrow=nrint, ncol = ntint)
+
+  for (j in 1:ntint){
+    Total_detected = c()
+    N_tot = c()
+    A_tot = c()
+
+    for (i in 1:(nbins-1)){
+
+      P_bin = 1-exp(-phi_true*tint[j]*exp(-midpoints[i]^2/tau_true^2)) # Approximate probability each bird in bin is detected by end of interval
+      A_bin = (pi * bins[i+1]^2) - (pi*bins[i]^2)
+      N_bin = A_bin*Density_true
+      Total_detected_bin = N_bin * P_bin
+      Total_detected = c(Total_detected,Total_detected_bin)
+    }
+
+    for (k in 1:nrint){
+      Ysum_expected[k,j] <- sum(Total_detected[rint_indices[k]:rint_indices[k+1]])
+    }
+
+  }
+
+  Ysim_matrix <- Y*NA
+
+  for (i in 1:nrint){
+    Ysim_matrix[i,1] <- Ysum_expected[i,1]
+    for (j in 2:ntint){
+      Ysim_matrix[i,j] <- Ysum_expected[i,j] - sum(Ysum_expected[i,(j-1)])
+    }
+  }
+  (Ysim_matrix/sum(Ysim_matrix)) %>% round(3)
+  (Y/sum(Y)) %>% round(3)
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  
   
   # --------------------------------------
   # ANALYZE DATA IN JAGS
@@ -233,7 +277,7 @@ for (sim_rep in 1:1000){
               parameters.to.save = c("phi","tau","Density"),
               n.chains = 3,
               n.thin = 1,
-              n.iter = 5000,
+              n.iter = 2000,
               n.burnin = 1000,
               parallel = TRUE)
   
@@ -245,18 +289,21 @@ for (sim_rep in 1:1000){
                      data.frame(sim_rep = sim_rep,
                                 
                                 tau_true = tau_true,
+                                #tau_MLE = tau_MLE,
                                 tau_est_q50 = out$q50$tau,
                                 tau_est_q05 = quantile(out$sims.list$tau,0.05),
                                 tau_est_q95 = quantile(out$sims.list$tau,0.95),
                                 tau_cov90 = quantile(out$sims.list$tau,0.05) < tau_true & quantile(out$sims.list$tau,0.95) > tau_true,
                                 
                                 phi_true = phi_true,
+                                #phi_MLE = phi_MLE,
                                 phi_est_q50 = out$q50$phi,
                                 phi_est_q05 = quantile(out$sims.list$phi,0.05),
                                 phi_est_q95 = quantile(out$sims.list$phi,0.95),
                                 phi_cov90 = quantile(out$sims.list$phi,0.05) < phi_true & quantile(out$sims.list$phi,0.95) > phi_true,
                                 
                                 Density_true = Density_true,
+                                #Density_MLE = Density_MLE,
                                 Density_est_q50 = out$q50$Density,
                                 Density_est_q05 = quantile(out$sims.list$Density,0.05),
                                 Density_est_q95 = quantile(out$sims.list$Density,0.95),
