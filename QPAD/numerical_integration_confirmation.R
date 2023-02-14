@@ -6,10 +6,10 @@
 rm(list=ls())
 
 
-tau_true = 0.5
-phi_true = 1
+tau_true = 1.5
+phi_true = 0.2
 
-N = 100000 # Number of birds to place on landscape (select a high number to provide sufficient sample size)
+N = 500000 # Number of birds to place on landscape (select a high number to provide sufficient sample size)
 dim = 10 # landscape size (metres)
 
 Density_true <- N/dim^2
@@ -34,7 +34,7 @@ N = nrow(birds)
 # Simulate bird cues, based on phi_true
 # ------------------------------------
 
-cues <- matrix(NA, nrow=N, ncol = 100)
+cues <- matrix(NA, nrow=N, ncol = 20)
 for (bird_id in 1:N) cues[bird_id,] <- cumsum(rexp(ncol(cues),phi_true))
 cues <- cues %>% 
   reshape2::melt() %>% 

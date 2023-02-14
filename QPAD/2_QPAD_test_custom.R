@@ -56,7 +56,7 @@ for (tau in seq(50,200,50)){
       # ------------------------------------
       
       # *****************************
-      # QPAD ONLY WORKS IF THE FOLLOWING SNIPPET IS USED FIRST
+      # QPAD IS UNBIASED IF THE FOLLOWING SNIPPET IS USED FIRST
       # cues <- subset(cues, cue_number == 1) # Each bird is only allowed to produce a single cue during the point count
       # *****************************
       
