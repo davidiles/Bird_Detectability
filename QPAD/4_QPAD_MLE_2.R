@@ -34,9 +34,9 @@ nll_fn <- function(tau_est, phi_est){
     for (i in 1:length(rint)){
       upper_r = rint[i]
       if (upper_r == Inf) upper_r = max_dist
-      CDF_binned[i,j] = integrate(f_d,lower=0.01,
+      CDF_binned[i,j] = integrate(f_d,lower=0.0001,
                                   upper = upper_r, 
-                                  subdivisions = 250)$value
+                                  subdivisions = 1000)$value
     }
   }
   
@@ -86,9 +86,9 @@ offset_fn <- function(tau_est, phi_est){
     for (i in 1:length(rint)){
       upper_r = rint[i]
       if (upper_r == Inf) upper_r = max_dist
-      CDF_binned[i,j] = integrate(f_d,lower=0.01,
+      CDF_binned[i,j] = integrate(f_d,lower=0.0001,
                                   upper = upper_r, 
-                                  subdivisions = 200)$value
+                                  subdivisions = 1000)$value
     }
   }
   
@@ -121,11 +121,11 @@ for (sim_rep in 1:100){
   
   set.seed(sim_rep)
   
-  tau_true = 1
+  tau_true = 1.5
   phi_true = 3
   
   N = 10000 # Number of birds to place on landscape (select a high number to provide sufficient sample size)
-  dim = 10 # landscape size
+  dim = 10 # landscape size (metres)
   
   Density_true <- N/dim^2
   Density_true
@@ -146,7 +146,7 @@ for (sim_rep in 1:100){
   N = nrow(birds)
   
   # ------------------------------------
-  # Simulate 200 bird cues, based on phi_true
+  # Simulate bird cues, based on phi_true
   # ------------------------------------
   
   cues <- matrix(NA, nrow=N, ncol = 50)
@@ -177,7 +177,7 @@ for (sim_rep in 1:100){
   # Transcription: distance and time bins
   # ------------------------------------
   
-  rint <- c(0.5,1,2)
+  rint <- c(0.5,1,Inf)
   tint <- c(3,5,10)
   nrint <- length(rint)
   ntint <- length(tint)
@@ -204,7 +204,7 @@ for (sim_rep in 1:100){
   # Maximum likelihood estimation
   res <- suppressWarnings(stats4::mle(nll_fn, 
                                       start = list(tau_est = 1, phi_est = 1),
-                                      lower = list(tau_est = 0.1, phi_est = 0.05)))
+                                      lower = list(tau_est = 0.01, phi_est = 0.01)))
   
   tau_MLE <- coef(res)[1]
   phi_MLE <- coef(res)[2]
