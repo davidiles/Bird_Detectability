@@ -7,7 +7,7 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
                               maxdistint = 10, # Max distance for numerical integration
                               tau_inits = NULL, 
                               phi_inits = NULL,
-                              method = "L-BFGS-B", ...) {
+                              method = "Nelder-Mead", ...) {
   
   logdmultinom <- function (x, size, prob) {lgamma(size + 1) + sum(x * log(prob) - lgamma(x + 1))}
   

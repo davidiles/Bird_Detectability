@@ -24,48 +24,26 @@ mdbin <- sapply(distance_protocols,function(x) length(x)) %>% max()
 # Maximum number of time bins
 mtbin <- sapply(time_protocols,function(x) length(x)) %>% max()
 
-#results_df = data.frame()
-#for (sim_rep in 1:100){
-
 # ******************************************
 # PART 1: SIMULATE DATA
 # ******************************************
 
 nsurvey = 100 # Number of point counts to simulate
 
-# Two covariates affect tau linearly
-tau_intercept <- log(0.7)
-#tau_beta1 <- -0.05
-#tau_beta2 <- 0.1
-#x1 <- runif(nsurvey,-3,3)
-#x2 <- runif(nsurvey,-3,3)
-#tau <- exp(tau_intercept + tau_beta1*x1 + tau_beta2*x2)
-#X1 <- model.matrix(~x1+x2)
-#colnames(X1) <- c("tau_b0","tau_b1","tau_b2")
+# One covariate has a negative log-linear effect on tau
+tau_betas <- c(log(0.7),-0.3)
+X1 <- model.matrix(~rnorm(nsurvey))
+colnames(X1) <- c("tau_int","tau_b1")
+tau <- exp((X1 %*% tau_betas)[,1])     # Tau for each survey
 
-# One covariate affects phi, but isn't modeled
-phi_intercept <- log(1.5)
-#phi_beta1 <- 0.1
-#phi_beta2 <- 0
-#x1 <- runif(nsurvey,-3,3)
-#x2 <- runif(nsurvey,-3,3)
-#phi <- exp(phi_intercept + phi_beta1*x1 + phi_beta2*x2)
-
-
-tau <- rep(exp(tau_intercept),nsurvey)
-phi <- rep(exp(phi_intercept),nsurvey)
-
-# -------------------------------------------------
-# Covariate design matrices for tau and phi
-# -------------------------------------------------
-#head(X1)
-#head(X2)
+# No covariate effects on phi
+phi_betas <- log(1.5)
+phi <- rep(exp(phi_betas),nsurvey)
 
 # -------------------------------------------------
 # Point count data are stored in arrays
 # -------------------------------------------------
 Dvec <- rep(NA,nsurvey) # True density at each survey location
-
 Yarray <- array(NA,dim=c(nsurvey,mdbin,mtbin))
 rarray <- array(NA,dim=c(nsurvey,mdbin))
 tarray <- array(NA,dim=c(nsurvey,mtbin))
@@ -75,10 +53,10 @@ for (k in 1:nsurvey){
   tau_true <- tau[k]
   phi_true <- phi[k]
   
-  dim = 10 # landscape x and y dimensions (100 metre increments)
-  D <- runif(1,50,100)  # Target density (birds per ha)
-  N <- round(D*dim^2)    # Number of birds to place on landscape
-  Density_true <- N/dim^2 # birds per ha
+  dim = 10                  # landscape x and y dimensions (100 metre increments)
+  D <- runif(1,50,100)      # Target density (birds per ha)
+  N <- round(D*dim^2)       # Number of birds to place on landscape
+  Density_true <- N/dim^2   # birds per ha
   Dvec[k] <- Density_true
   
   # ------------------------------------
@@ -90,7 +68,7 @@ for (k in 1:nsurvey){
   
   # Distances to observer
   birds$dist <- sqrt(birds$x^2 + birds$y^2)
- 
+  
   # Remove birds outside maximum distance
   birds <- subset(birds, dist <= (dim/2))
   birds <- birds %>% arrange(dist)
@@ -161,11 +139,17 @@ source("joint_fns.R")
 fit <- cmulti.fit.joint(Yarray,
                         rarray,
                         tarray,
-                        X1 = NULL, # Implies intercept only model
+                        X1 = X1, # Design matrix for tau
                         X2 = NULL # Implies intercept only model
-                        )
+)
 
-fit$coefficients
+# Compare estimated to true coefficients
+rbind(
+  # Estimated coefficients (first row)
+  fit$coefficients,
+  # True coefficients (second row)
+  c(tau_betas,phi_betas))
+
 
 # Calculate survey-level offsets
 log_offsets <- calculate.offsets(fit)
@@ -174,6 +158,7 @@ log_offsets <- calculate.offsets(fit)
 Ysum <- apply(Yarray,1,sum,na.rm = TRUE)
 Dhat <- Ysum*exp(log_offsets)
 
+# Relationship between estimated density at each survey location (after correcting for detectability) and true density 
 ggplot()+
   geom_point(aes(x = Dvec,y=Dhat), col = "dodgerblue")+
   geom_abline(slope=1,intercept=0)+
@@ -182,4 +167,4 @@ ggplot()+
   xlab("True density at survey location")+
   ylab("Estimated density at survey location")+
   theme_bw()
-  
+
