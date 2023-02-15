@@ -86,9 +86,9 @@ offset_fn <- function(tau_est, phi_est){
     for (i in 1:length(rint)){
       upper_r = rint[i]
       if (upper_r == Inf) upper_r = max_dist
-      CDF_binned[i,j] = integrate(f_d,lower=0.01,
+      CDF_binned[i,j] = integrate(f_d,lower=0.005,
                                   upper = upper_r, 
-                                  subdivisions = 200)$value
+                                  subdivisions = 1000)$value
     }
   }
   
@@ -121,14 +121,15 @@ for (sim_rep in 1:100){
   
   set.seed(sim_rep)
   
-  tau_true = 1
-  phi_true = 3
+  tau_true = 0.4
+  phi_true = 5
   
   N = 10000 # Number of birds to place on landscape (select a high number to provide sufficient sample size)
   dim = 10 # landscape size
   
   Density_true <- N/dim^2
   Density_true
+  
   # ------------------------------------
   # Place birds on landscape around observer (centred on landscape)
   # ------------------------------------
@@ -149,7 +150,7 @@ for (sim_rep in 1:100){
   # Simulate 200 bird cues, based on phi_true
   # ------------------------------------
   
-  cues <- matrix(NA, nrow=N, ncol = 50)
+  cues <- matrix(NA, nrow=N, ncol = 200)
   for (bird_id in 1:N) cues[bird_id,] <- cumsum(rexp(ncol(cues),phi_true))
   cues <- cues %>% 
     reshape2::melt() %>% 
@@ -177,7 +178,7 @@ for (sim_rep in 1:100){
   # Transcription: distance and time bins
   # ------------------------------------
   
-  rint <- c(0.5,1,2)
+  rint <- c(0.5,1,Inf)
   tint <- c(3,5,10)
   nrint <- length(rint)
   ntint <- length(tint)
@@ -203,7 +204,7 @@ for (sim_rep in 1:100){
   
   # Maximum likelihood estimation
   res <- suppressWarnings(stats4::mle(nll_fn, 
-                                      start = list(tau_est = 1, phi_est = 1),
+                                      start = list(tau_est = 0.3, phi_est = 0.3),
                                       lower = list(tau_est = 0.1, phi_est = 0.05)))
   
   tau_MLE <- coef(res)[1]
