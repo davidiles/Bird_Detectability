@@ -21,9 +21,11 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
   # Only conduct analysis on point counts with non-zero total counts
   Ysum <- apply(Yarray,1,sum,na.rm = TRUE)
   Ykeep <- which(Ysum > 0)
-  Yarray <- Yarray[Ykeep, , ]
-  rarray<- rarray[Ykeep, ]
-  tarray<- tarray[Ykeep, ]
+  if (length(Ykeep) != length(Ysum)){
+    Yarray <- Yarray[Ykeep, , ]
+    rarray<- rarray[Ykeep, ]
+    tarray<- tarray[Ykeep, ]
+  }
   nsurvey <- dim(Yarray)[1] # Number of surveys
   nrint <- apply(rarray,1,function(x)length(na.omit(x))) # Number of distance bins for each point count
   ntint <- apply(tarray,1,function(x)length(na.omit(x))) # Number of time bins for each point count
@@ -144,10 +146,10 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
 }
 
 calculate.offsets <- function (fit,
-                                rarray = rarray,
-                                tarray = tarray,
-                                X1 = NULL,
-                                X2 = NULL) {
+                               rarray = rarray,
+                               tarray = tarray,
+                               X1 = NULL,
+                               X2 = NULL) {
   
   # Data used for fitting models
   rarray_fit = fit$input_data$rarray
