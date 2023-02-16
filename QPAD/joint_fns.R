@@ -233,6 +233,6 @@ calculate.offsets <- function (rval) {
     A[k] <- pi*max_r[k]^2
   }
     
-  log_offset <- log(1/p)
+  log_offset <- log(p)
   log_offset
 }

@@ -156,7 +156,7 @@ log_offsets <- calculate.offsets(fit)
 
 # Use offsets to estimate true density at each survey location
 Ysum <- apply(Yarray,1,sum,na.rm = TRUE)
-Dhat <- Ysum*exp(log_offsets)
+Dhat <- Ysum/exp(log_offsets)
 
 # Relationship between estimated density at each survey location (after correcting for detectability) and true density 
 ggplot()+
