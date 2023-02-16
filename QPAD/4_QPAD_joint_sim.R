@@ -49,7 +49,7 @@ colnames(X1) <- c("tau_int","tau_b1")
 # ----------------------------------------------------------
 
 covariate.DOY <- round(runif(nsurvey,120,160))
-phi_betas <- c(-15.5,0.22,-0.0008)
+phi_betas <- c(-15,0.248,-0.001)
 
 # Phi for each survey
 phi <- exp(phi_betas[1] + phi_betas[2]*covariate.DOY + phi_betas[3]*covariate.DOY^2) 
@@ -181,13 +181,15 @@ Ysum <- apply(Yarray,1,sum,na.rm = TRUE) # Total counts at each point count loca
 # ******************************************
 # FIT MODEL TO SIMULATED DATA
 # ******************************************
-
+start <- Sys.time()
 fit <- cmulti.fit.joint(Yarray,
                         rarray,
                         tarray,
                         X1 = X1, # Design matrix for tau
                         X2 = X2  # Design matrix for phi
 )
+end <- Sys.time()
+print(end-start) # 12 min
 
 # ******************************************
 # Extract/inspect estimates
@@ -204,12 +206,29 @@ tau_est <- exp(X1 %*% fit$coefficients[1:2])
 plot(tau_est ~ covariate.FC, col = "dodgerblue", pch = 19) # Estimate
 points(tau~ covariate.FC, pch = 19) # Truth
 
+ggplot()+
+  geom_point(aes(x = covariate.FC,y=tau_est, col = "Estimate"))+
+  geom_line(aes(x = covariate.FC,y=tau, col = "Truth"))+
+  xlab("Percent forest cover")+
+  ylab("Tau")+
+  scale_color_manual(values=c("dodgerblue","black"), name = "")+
+  ggtitle("Predicted vs True Tau")+
+  theme_bw()
+
 # -----------------
 # Estimates of phi
 # -----------------
+phi_est <- exp(X2 %*% fit$coefficients[3:5])
 
-plot(phi_est ~ covariate.DOY, col = "dodgerblue", pch = 19) # Estimate
-points(phi~ covariate.DOY, pch = 19) # Truth
+ggplot()+
+  geom_point(aes(x = covariate.DOY,y=phi_est, col = "Estimate"))+
+  geom_line(aes(x = covariate.DOY,y=phi, col = "Truth"))+
+  xlab("Day of year")+
+  ylab("Phi")+
+  scale_color_manual(values=c("dodgerblue","black"), name = "")+
+  ggtitle("Predicted vs True Phi")+
+  theme_bw()
+
 
 # ******************************************
 # Calculate detectability offsets for each survey

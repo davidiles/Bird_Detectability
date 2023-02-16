@@ -131,7 +131,8 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
   nlimit <- c(.Machine$double.xmin, .Machine$double.xmax)^(1/3)
   res <- optim(inits, nll.fun, method = method, hessian = TRUE)
   
-  rval <- list(coefficients = res$par, 
+  rval <- list(input_data = input_data,
+               coefficients = res$par, 
                #vcov = try(.solvenear(res$hessian)), 
                loglik = -res$value)
   
@@ -139,19 +140,18 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
   rval$coefficients <- unname(rval$coefficients)
   rval$vcov <- unname(rval$vcov)
   rval$results <- res
-  rval$input_data <- input_data
   rval
 }
 
 
-calculate.offsets <- function (rval) {
+calculate.offsets <- function (fit) {
 
-  Yarray = rval$input_data$Yarray
-  rarray = rval$input_data$rarray
-  tarray = rval$input_data$tarray
-  X1 = rval$input_data$X1
-  X2 = rval$input_data$X2
-  maxdistint = rval$input_data$maxdistint
+  Yarray = fit$input_data$Yarray
+  rarray = fit$input_data$rarray
+  tarray = fit$input_data$tarray
+  X1 = fit$input_data$X1
+  X2 = fit$input_data$X2
+  maxdistint = fit$input_data$maxdistint
   nsurvey <- dim(Yarray)[1] # Number of surveys
   nrint <- apply(rarray,1,function(x)length(na.omit(x))) # Number of distance bins for each point count
   ntint <- apply(tarray,1,function(x)length(na.omit(x))) # Number of time bins for each point count
@@ -176,8 +176,8 @@ calculate.offsets <- function (rval) {
   max_r[max_r == Inf] <- maxdistint
   
   # Tau and phi
-  tau_params <- rval$coefficients[1:length(tau_params)]
-  phi_params <- rval$coefficients[(length(tau_params)+1):length(rval$coefficients)]
+  tau_params <- fit$coefficients[1:length(tau_params)]
+  phi_params <- fit$coefficients[(length(tau_params)+1):length(fit$coefficients)]
 
   tau <- poisson("log")$linkinv(drop(X1 %*% tau_params))
   phi <- poisson("log")$linkinv(drop(X2 %*% phi_params))
