@@ -192,7 +192,12 @@ fit <- cmulti.fit.joint(Yarray,
 # ******************************************
 # Extract/inspect estimates
 # ******************************************
+
 fit$coefficients
+
+# -----------------
+# Estimates of tau
+# -----------------
 
 tau_est <- exp(X1 %*% fit$coefficients[1:2])
 
@@ -205,7 +210,6 @@ points(tau~ covariate.FC, pch = 19) # Truth
 
 plot(phi_est ~ covariate.DOY, col = "dodgerblue", pch = 19) # Estimate
 points(phi~ covariate.DOY, pch = 19) # Truth
-
 
 # ******************************************
 # Calculate detectability offsets for each survey
