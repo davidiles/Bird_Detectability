@@ -1,5 +1,5 @@
 # **************************************
-# Simulate 1000 point counts that were collected under 30 different protocols
+# Simulate 2000 point counts that were collected under 30 different protocols
 #
 # Survey-level density has a quadratic relationship with a 'mean annual temperature' covariate
 #
@@ -20,7 +20,7 @@ source("joint_fns.R")
 # ----------------------------------------------------------
 
 # Number of point counts / survey locations to simulate
-nsurvey = 1000 
+nsurvey = 2000 
 
 # Mean annual temperature at each survey
 covariate.MAT <- runif(nsurvey,0,25)
@@ -175,21 +175,24 @@ for (k in 1:nsurvey){
   
 }
 
-
-Ysum <- apply(Yarray,1,sum,na.rm = TRUE) # Total counts at each point count location
-
 # ******************************************
-# FIT MODEL TO SIMULATED DATA
+# FIT MODEL TO SIMULATED DATA (only first 1000 point counts)
 # ******************************************
+Yarray_fit <- Yarray[1:1000,,]
+rarray_fit <- rarray[1:1000,]
+tarray_fit <- tarray[1:1000,]
+X1_fit <- X1[1:1000,]
+X2_fit <- X2[1:1000,]
+
 start <- Sys.time()
-fit <- cmulti.fit.joint(Yarray,
-                        rarray,
-                        tarray,
-                        X1 = X1, # Design matrix for tau
-                        X2 = X2  # Design matrix for phi
+fit <- cmulti.fit.joint(Yarray_fit,
+                        rarray_fit,
+                        tarray_fit,
+                        X1 = X1_fit, # Design matrix for tau
+                        X2 = X2_fit  # Design matrix for phi
 )
 end <- Sys.time()
-print(end-start) # 12 min
+print(end-start) # 2.3 min
 
 # ******************************************
 # Extract/inspect estimates
@@ -202,9 +205,6 @@ fit$coefficients
 # -----------------
 
 tau_est <- exp(X1 %*% fit$coefficients[1:2])
-
-plot(tau_est ~ covariate.FC, col = "dodgerblue", pch = 19) # Estimate
-points(tau~ covariate.FC, pch = 19) # Truth
 
 ggplot()+
   geom_point(aes(x = covariate.FC,y=tau_est, col = "Estimate"))+
@@ -231,15 +231,21 @@ ggplot()+
 
 
 # ******************************************
-# Calculate detectability offsets for each survey
+# Calculate detectability offsets for each survey in the full dataset (2000)
 # ******************************************
 
 # Calculate survey-level offsets
-log_offsets <- calculate.offsets(fit)
+log_offsets <- calculate.offsets(fit,
+                                   rarray = rarray,
+                                   tarray = tarray,
+                                   X1 = X1,
+                                   X2 = X2)
+length(log_offsets)
 
 # ******************************************
 # Estimate density at each survey location, using GLM with effect of mean annual temperature
 # ******************************************
+Ysum <- apply(Yarray,1,sum,na.rm = TRUE)
 
 zMAT <- scale(covariate.MAT) # z-standardize
 glm1 <- glm(Ysum ~ zMAT + I(zMAT^2) + offset(log_offsets), family = poisson(link="log"))

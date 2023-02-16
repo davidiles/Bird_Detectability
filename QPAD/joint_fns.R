@@ -143,20 +143,33 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
   rval
 }
 
-
-calculate.offsets <- function (fit) {
-
-  Yarray = fit$input_data$Yarray
-  rarray = fit$input_data$rarray
-  tarray = fit$input_data$tarray
-  X1 = fit$input_data$X1
-  X2 = fit$input_data$X2
+calculate.offsets <- function (fit,
+                                rarray = rarray,
+                                tarray = tarray,
+                                X1 = NULL,
+                                X2 = NULL) {
+  
+  # Data used for fitting models
+  rarray_fit = fit$input_data$rarray
+  tarray_fit = fit$input_data$tarray
+  X1_fit = fit$input_data$X1
+  X2_fit = fit$input_data$X2
   maxdistint = fit$input_data$maxdistint
-  nsurvey <- dim(Yarray)[1] # Number of surveys
+  
+  # Check that dimensions of X1 and X2 are correct
+  if (dim(X1)[2] != dim(X1_fit)[2]){
+    print("Error in X1 dimensions")
+  }
+  
+  if (dim(X2)[2] != dim(X2_fit)[2]){
+    print("Error in X2 dimensions")
+  }
+  
+  nsurvey <- dim(X1)[1] # Number of surveys
   nrint <- apply(rarray,1,function(x)length(na.omit(x))) # Number of distance bins for each point count
   ntint <- apply(tarray,1,function(x)length(na.omit(x))) # Number of time bins for each point count
   
-
+  
   if (!is.null(X1)){
     tau_params <- colnames(X1)
   } else {
@@ -178,32 +191,32 @@ calculate.offsets <- function (fit) {
   # Tau and phi
   tau_params <- fit$coefficients[1:length(tau_params)]
   phi_params <- fit$coefficients[(length(tau_params)+1):length(fit$coefficients)]
-
+  
   tau <- poisson("log")$linkinv(drop(X1 %*% tau_params))
   phi <- poisson("log")$linkinv(drop(X2 %*% phi_params))
-
+  
   # Calculate offsets for each survey
   p <- A <- rep(NA,nsurvey)
   
   for (k in 1:nsurvey){
-
+    
     tau_k <- tau[k]
     phi_k <- phi[k]
-
+    
     # Calculate CDF and p
     f_d = function(dmax){
       integrand = substitute(2*pi*dmax *(1-exp(-phi*tmax*exp(-dmax^2/tau^2))),
                              list(phi = phi_k,tau = tau_k,tmax = tmax))
       eval(integrand)
     }
-
+    
     # Calculate CDF
     Y <- Yarray[k,1:nrint[k],1:ntint[k]]
     CDF_binned <- matrix(NA,nrow=nrint[k],ncol=ntint[k])
     for (j in 1:ntint[k]){
-
+      
       tmax = max(tarray[k,j])
-
+      
       for (i in 1:nrint[k]){
         upper_r = rarray[k,i]
         if (upper_r == Inf) upper_r = max_r[k]
@@ -212,7 +225,7 @@ calculate.offsets <- function (fit) {
                                     subdivisions = 500)$value
       }
     }
-
+    
     # Difference across distance bins
     tmp1 = CDF_binned
     if (nrow(tmp1)>1){
@@ -220,7 +233,7 @@ calculate.offsets <- function (fit) {
         tmp1[i,] <- CDF_binned[i,] - CDF_binned[i-1,]
       }
     }
-
+    
     # Difference across time bins
     p_matrix = tmp1
     if (ncol(p_matrix)>1){
@@ -232,7 +245,7 @@ calculate.offsets <- function (fit) {
     p[k] <- sum(p_matrix)
     A[k] <- pi*max_r[k]^2
   }
-    
+  
   log_offset <- log(p)
   log_offset
 }
