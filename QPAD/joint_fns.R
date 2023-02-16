@@ -156,16 +156,7 @@ calculate.offsets <- function (fit,
   X2_fit = fit$input_data$X2
   maxdistint = fit$input_data$maxdistint
   
-  # Check that dimensions of X1 and X2 are correct
-  if (dim(X1)[2] != dim(X1_fit)[2]){
-    print("Error in X1 dimensions")
-  }
-  
-  if (dim(X2)[2] != dim(X2_fit)[2]){
-    print("Error in X2 dimensions")
-  }
-  
-  nsurvey <- dim(X1)[1] # Number of surveys
+  nsurvey <- dim(rarray)[1] # Number of surveys
   nrint <- apply(rarray,1,function(x)length(na.omit(x))) # Number of distance bins for each point count
   ntint <- apply(tarray,1,function(x)length(na.omit(x))) # Number of time bins for each point count
   
