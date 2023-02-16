@@ -12,6 +12,8 @@ library(ggpubr)
 
 rm(list=ls())
 
+set.seed(999)
+
 setwd("~/1_Work/Bird_Detectability/QPAD") # <- set to wherever scripts are stored
 source("joint_fns.R")
 
@@ -101,7 +103,6 @@ for (k in 1:nsurvey){
   phi_true <- phi[k]
   Density_true <- Density[k]
   
-  
   # ------------------------------------
   # Place birds on landscape around observer (centred on landscape)
   # ------------------------------------
@@ -178,6 +179,8 @@ for (k in 1:nsurvey){
 # ******************************************
 # FIT MODEL TO SIMULATED DATA (only first 1000 point counts)
 # ******************************************
+
+
 Yarray_fit <- Yarray[1:1000,,]
 rarray_fit <- rarray[1:1000,]
 tarray_fit <- tarray[1:1000,]
@@ -218,6 +221,7 @@ ggplot()+
 # -----------------
 # Estimates of phi
 # -----------------
+
 phi_est <- exp(X2 %*% fit$coefficients[3:5])
 
 ggplot()+
@@ -231,7 +235,7 @@ ggplot()+
 
 
 # ******************************************
-# Calculate detectability offsets for each survey in the full dataset (2000)
+# Calculate detectability offsets for each survey in the full dataset (n = 2000)
 # ******************************************
 
 # Calculate survey-level offsets
@@ -240,19 +244,21 @@ log_offsets <- calculate.offsets(fit,
                                    tarray = tarray,
                                    X1 = X1,
                                    X2 = X2)
-length(log_offsets)
 
 # ******************************************
-# Estimate density at each survey location, using GLM with effect of mean annual temperature
+# Fit density model to point count data, using GLM with effect of mean annual temperature
 # ******************************************
-Ysum <- apply(Yarray,1,sum,na.rm = TRUE)
 
-zMAT <- scale(covariate.MAT) # z-standardize
-glm1 <- glm(Ysum ~ zMAT + I(zMAT^2) + offset(log_offsets), family = poisson(link="log"))
+dat <- data.frame(Y = apply(Yarray,1,sum,na.rm = TRUE),
+                  zMAT = scale(covariate.MAT),
+                  log_off = log_offsets)
 
-# Predict density
-bhat <- coef(glm1)
-Dhat <- exp(bhat[1] + bhat[2]*zMAT + bhat[3]*zMAT^2)
+glm1 <- glm(Y ~ zMAT + I(zMAT^2) + offset(log_off), family = poisson(link="log"), data = dat)
+
+# Predict density at each location
+pred_df <- dat
+pred_df$log_off <- 0 # Set offset to zero (i.e., remove detectability effects)
+Dhat <- predict(glm1, newdata = pred_df, type = "response")
 
 # Estimated density at each survey location (after correcting for detectability)
 ggplot()+
@@ -263,4 +269,3 @@ ggplot()+
   scale_color_manual(values=c("dodgerblue","black"), name = "")+
   ggtitle("Predicted vs True Density")+
   theme_bw()
-
