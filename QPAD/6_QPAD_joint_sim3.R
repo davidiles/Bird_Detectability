@@ -17,8 +17,21 @@ source("joint_fns.R")
 result_df <- expand.grid(sim_rep = 1:100,
                          tau = seq(0.2,2,0.4),
                          phi = c(0.1,0.5,2.5),
-                         Density = c(0.1,0.5,2.5)
-                         )
+                         Density = c(0.1,0.5,2.5),
+                         
+                         tau_est_joint = NA,
+                         phi_est_joint = NA,
+                         log_offset_joint = NA,
+                         Density_est_joint = NA,
+                         
+                         tau_est_indep = NA,
+                         phi_est_indep = NA,
+                         log_offset_indep = NA,
+                         Density_est_indep = NA
+                         
+                         
+                         
+)
 
 for (sim_rep in 1:nrow(result_df)){
   
@@ -133,6 +146,8 @@ for (sim_rep in 1:nrow(result_df)){
     
   }
   
+  result_df$Ysum[sim_rep] <- sum(Yarray)
+  
   # ******************************************
   # FIT JOINT MODEL AND ESTIMATE DENSITY
   # ******************************************
@@ -149,13 +164,12 @@ for (sim_rep in 1:nrow(result_df)){
   
   # Calculate survey-level offsets
   log_offset <- calculate.offsets(fit,
-                                   rarray = rarray,
-                                   tarray = tarray,
-                                   X1 = NULL,
-                                   X2 = NULL)
+                                  rarray = rarray,
+                                  tarray = tarray,
+                                  X1 = NULL,
+                                  X2 = NULL)
   
   # Estimates
-  result_df$Ysum[sim_rep] <- sum(Yarray)
   result_df$tau_est_joint[sim_rep] <- exp(fit$coefficients[1])
   result_df$phi_est_joint[sim_rep] <- exp(fit$coefficients[2])
   result_df$log_offset_joint[sim_rep] <- log_offset
@@ -164,44 +178,63 @@ for (sim_rep in 1:nrow(result_df)){
   # ******************************************
   # FIT INDEPENDENT DISTANCE AND REMOVAL MODELS
   # ******************************************
-  Y_distance <- apply(Yarray,2,sum) %>% matrix(.,1)
-  fit.q <- cmulti.fit(Y_distance,rarray, type = "dis")
-  tau_indep = exp(fit.q$coefficients)
-  
-  Y_removal <- apply(Yarray,3,sum) %>% matrix(.,1)
-  fit.p <- cmulti.fit(Y_removal,tarray, type = "rem")
-  phi_indep = exp(fit.p$coefficients)
-  
-  # Estimate density
-  A_hat = pi*tau_indep^2
-  p_hat = 1-exp(-max(tarray)*phi_indep)
-  D_hat <- sum(Yarray)/(A_hat*p_hat)
-  
-  result_df$tau_est_indep[sim_rep] <- tau_indep
-  result_df$phi_est_indep[sim_rep] <- phi_indep
-  result_df$Density_est_indep[sim_rep] <- D_hat/1000
-  
+  tryCatch({
+    Y_distance <- apply(Yarray,2,sum) %>% matrix(.,1)
+    fit.q <- cmulti.fit(Y_distance,rarray, type = "dis")
+    tau_indep = exp(fit.q$coefficients)
+    
+    Y_removal <- apply(Yarray,3,sum) %>% matrix(.,1)
+    fit.p <- cmulti.fit(Y_removal,tarray, type = "rem")
+    phi_indep = exp(fit.p$coefficients)
+    
+    # Estimate density
+    A_hat = pi*tau_indep^2
+    p_hat = 1-exp(-max(tarray)*phi_indep)
+    D_hat <- sum(Yarray)/(A_hat*p_hat)
+    
+    result_df$tau_est_indep[sim_rep] <- tau_indep
+    result_df$phi_est_indep[sim_rep] <- phi_indep
+    result_df$Density_est_indep[sim_rep] <- D_hat/1000
+  },
+  error = function(e){
+    
+  }
+  )
   print(sim_rep)
   
 }
 
-
 result_df$tau_label = paste0("Tau = ",result_df$tau)
 result_df$phi_label = paste0("Phi = ",result_df$phi)
-result_df$Density_label = paste0("Density = ",result_df$Density)
+result_df$Density_label = paste0("True Density = ",result_df$Density)
+save(result_df,file="results/QPAD_joint_sim3.R")
 
 median_results <- result_df %>%
   group_by(tau_label,phi_label,Density_label) %>%
-  summarize_all(median)
+  summarize_all(median,na.rm=TRUE)
 
-ggplot(median_results)+
-  geom_line(aes(x = tau, y = Density_est_joint, col = "Joint", linetype = "Joint"), size = 1.5)+
-  geom_line(aes(x = tau, y = Density_est_indep, col = "Indep", linetype = "Indep"), size = 1.5)+
-  geom_hline(aes(yintercept = Density, col = "Truth", linetype = "Truth"), size = 1.5)+
-  facet_wrap(Density_label~phi_label, scales = "free")+
+result_plot <- ggplot(median_results)+
+  geom_hline(yintercept=0,col="white")+
+  geom_line(aes(x = tau, y = Density_est_joint, 
+                col = "Joint", 
+                linetype = "Joint"), size = 1)+
+  geom_line(aes(x = tau, y = Density_est_indep, 
+                col = "Indep", 
+                linetype = "Indep"), size = 1)+
+  geom_hline(aes(yintercept = Density, 
+                 col = "Truth", 
+                 linetype = "Truth"), size = 1)+
   scale_color_manual(values=c("orangered","dodgerblue","black"),name="Model")+
-  scale_linetype_manual(values=c(1,1,2),name="Model")+
+  scale_linetype_manual(values=c(1,1,3),name="Model")+
   ylab("Density Estimate")+
   xlab("Tau")+
-  theme_few()+
-  ggtitle("Simulation Results")
+  theme_bw()+
+  
+  facet_grid(Density_label~phi_label, scales = "free")+
+  labs(title='Simulation Results',
+       subtitle='Median across 100 repeated simulations')
+result_plot
+
+png("results/QPAD_joint_sim3.png", height=6,width=6,units="in",res=600)
+print(result_plot)
+dev.off()
