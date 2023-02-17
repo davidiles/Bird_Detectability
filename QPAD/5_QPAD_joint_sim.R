@@ -154,7 +154,7 @@ for (k in 1:nsurvey){
   # Transcription: distance and time bins
   # ------------------------------------
   
-  # Randomly select upper 
+  # Randomly select sampling protocol
   rint <- sample(distance_protocols,1)[[1]]
   tint <- sample(time_protocols,1)[[1]]
   nrint <- length(rint)

@@ -13,13 +13,10 @@ rm(list=ls())
 setwd("~/1_Work/Bird_Detectability/QPAD") # <- set to wherever scripts are stored
 source("joint_fns.R")
 
-# Density at each survey (select large value for large sample size)
-Density <- 100
-
 result_df <- expand.grid(sim_rep = 1:200,
-                         tau = c(0.2,1,2),
-                         phi = c(1),
-                         Density = Density,
+                         tau = c(0.5,1,1.5),
+                         phi = c(0.2,1,5),
+                         Density = c(0.1,0.5,1),
                          Ysum = NA,
                          tau_est = NA,
                          phi_est = NA,
@@ -28,6 +25,9 @@ result_df <- expand.grid(sim_rep = 1:200,
 
 for (sim_rep in 1:nrow(result_df)){
   
+  set.seed(sim_rep)
+  
+  Density <- result_df$Density[sim_rep]
   tau <- result_df$tau[sim_rep]
   phi <- result_df$phi[sim_rep]
   
@@ -42,7 +42,7 @@ for (sim_rep in 1:nrow(result_df)){
   distance_protocols <- list(p1 = c(0.5,1,Inf))
   
   # A few different protocols for time binning
-  time_protocols <- list(p1 = c(3,5,10))
+  time_protocols <- list(p1 = seq(1,10))
   
   # Maximum number of distance bins
   mdbin <- sapply(distance_protocols,function(x) length(x)) %>% max()
@@ -63,7 +63,7 @@ for (sim_rep in 1:nrow(result_df)){
     # Parameters for this survey
     tau_true <- tau
     phi_true <- phi
-    Density_true <- Density
+    Density_true <- Density*1000
     
     # ------------------------------------
     # Place birds on landscape around observer (centred on landscape)
@@ -116,7 +116,6 @@ for (sim_rep in 1:nrow(result_df)){
     # Transcription: distance and time bins
     # ------------------------------------
     
-    # Randomly select upper 
     rint <- sample(distance_protocols,1)[[1]]
     tint <- sample(time_protocols,1)[[1]]
     nrint <- length(rint)
