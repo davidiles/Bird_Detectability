@@ -31,7 +31,7 @@ source("joint_fns.R")
 # ----------------------------------------------------------
 
 # Number of point counts / survey locations to simulate
-nsurvey = 1000 
+nsurvey = 5000 
 
 # Mean annual temperature at each survey
 covariate.MAT <- runif(nsurvey,0,25)
@@ -192,6 +192,8 @@ for (k in 1:nsurvey){
 }
 
 Ysum <- apply(Yarray,1,sum,na.rm=TRUE)
+sum(Ysum>0)
+
 
 # -------------------------------------------------
 # Bootstrap
@@ -199,8 +201,7 @@ Ysum <- apply(Yarray,1,sum,na.rm=TRUE)
 MATmn <- mean(covariate.MAT)
 MATsd <- sd(covariate.MAT)
 
-
-predMAT <- seq(0,25,length.out = 1000)
+predMAT <- seq(0,25,length.out = 500)
 predMATz <- (predMAT-MATmn)/MATsd
 
 bootreps <- 200
