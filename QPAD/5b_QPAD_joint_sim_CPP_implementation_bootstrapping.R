@@ -21,7 +21,6 @@ rm(list=ls())
 
 setwd("~/1_Work/Bird_Detectability/QPAD") # <- set to wherever scripts are stored
 
-#RcppEigen
 Rcpp::sourceCpp("nll_fun.cpp")
 source("cmulti_fit_joint_cpp.R")
 source("joint_fns.R")
@@ -31,7 +30,7 @@ source("joint_fns.R")
 # ----------------------------------------------------------
 
 # Number of point counts / survey locations to simulate
-nsurvey = 5000 
+nsurvey = 10000 
 
 # Mean annual temperature at each survey
 covariate.MAT <- runif(nsurvey,0,25)
@@ -194,7 +193,6 @@ for (k in 1:nsurvey){
 Ysum <- apply(Yarray,1,sum,na.rm=TRUE)
 sum(Ysum>0)
 
-
 # -------------------------------------------------
 # Bootstrap
 # -------------------------------------------------
@@ -216,13 +214,15 @@ for (b in 1:bootreps){
   X1boot <- X1[bootsamps,]
   X2boot <- X2[bootsamps,]
   
+  start <- Sys.time()
   fit <- cmulti_fit_joint(Yboot,
                           rboot,
                           tboot,
                           X1 = X1boot, # Design matrix for tau
                           X2 = X2boot  # Design matrix for phi
   )
-  
+  end <- Sys.time()
+  print(end-start)
   log_offsets <- calculate.offsets(fit,
                                    rarray = rboot,
                                    tarray = tboot,
