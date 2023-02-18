@@ -1,5 +1,5 @@
 # **************************************
-# Simulate 2000 point counts that were collected under 30 different protocols
+# Simulate 5000 point counts that were collected under 30 different protocols
 #
 # Survey-level density has a quadratic relationship with a 'mean annual temperature' covariate
 #
@@ -12,9 +12,10 @@ library(ggpubr)
 
 rm(list=ls())
 
-set.seed(999)
+#set.seed(999)
 
 setwd("~/1_Work/Bird_Detectability/QPAD") # <- set to wherever scripts are stored
+
 source("joint_fns.R")
 
 # ----------------------------------------------------------
@@ -22,12 +23,18 @@ source("joint_fns.R")
 # ----------------------------------------------------------
 
 # Number of point counts / survey locations to simulate
-nsurvey = 2000 
+nsurvey = 5000 
 
 # Mean annual temperature at each survey
 covariate.MAT <- runif(nsurvey,0,25)
-Density <- exp(log(0.2) + 0.15*covariate.MAT -0.008*covariate.MAT^2)
 
+# Parameters controlling the quadratic
+A <- -0.01     # steepness
+k <- log(0.5)  # maximum of quadratic  
+h <- 10        # x location of vertex
+
+# Density at each survey location
+Density <- exp(A*(covariate.MAT-h)^2 + k)
 plot(Density~covariate.MAT)
 
 # ----------------------------------------------------------
@@ -35,7 +42,7 @@ plot(Density~covariate.MAT)
 # ----------------------------------------------------------
 
 covariate.FC <- plogis(rnorm(nsurvey,1,2))
-tau_betas <- c(log(0.7),-0.5)
+tau_betas <- c(log(1.5),-3)
 
 # Tau for each survey
 tau <- exp(tau_betas[1] + tau_betas[2]*covariate.FC) 
@@ -51,10 +58,14 @@ colnames(X1) <- c("tau_int","tau_b1")
 # ----------------------------------------------------------
 
 covariate.DOY <- round(runif(nsurvey,120,160))
-phi_betas <- c(-15,0.248,-0.001)
+
+# Parameters controlling the quadratic
+A <- -0.01     # steepness
+k <- log(1.5)  # maximum of quadratic  
+h <- 140       # x location of vertex
 
 # Phi for each survey
-phi <- exp(phi_betas[1] + phi_betas[2]*covariate.DOY + phi_betas[3]*covariate.DOY^2) 
+phi <- exp(A*(covariate.DOY-h)^2 + k)
 plot(phi~covariate.DOY)
 
 # Design matrix for phi (scaled covariate for better model convergence)
@@ -103,99 +114,88 @@ for (k in 1:nsurvey){
   phi_true <- phi[k]
   Density_true <- Density[k]
   
-  # ------------------------------------
-  # Place birds on landscape around observer (centred on landscape)
-  # ------------------------------------
-  dim <- 10 # landscape x and y dimensions (100 metre increments)
-  N <- round(Density_true*dim^2) # Number of birds to place on landscape
-  
-  birds <- data.frame(x = runif(N,-dim/2,dim/2),
-                      y = runif(N,-dim/2,dim/2))
-  
-  # Distances to observer
-  birds$dist <- sqrt(birds$x^2 + birds$y^2)
-  
-  # Remove birds outside maximum distance
-  birds <- subset(birds, dist <= (dim/2))
-  birds <- birds %>% arrange(dist)
-  birds$bird_id = 1:nrow(birds)
-  N = nrow(birds)
-  
-  birds$dist <- birds$dist
-  
-  # ------------------------------------
-  # Simulate bird cues, based on phi_true
-  # ------------------------------------
-  
-  cues <- matrix(NA, nrow=N, ncol = 50)
-  for (bird_id in 1:N) cues[bird_id,] <- cumsum(rexp(ncol(cues),phi_true))
-  cues <- cues %>% 
-    reshape2::melt() %>% 
-    rename(bird_id = Var1, cue_number = Var2, time = value) %>%
-    arrange(bird_id,cue_number)
-  
-  cues$dist <- birds$dist[cues$bird_id]
-  
-  # ------------------------------------
-  # Determine which cues are detected, based on tau_true
-  # ------------------------------------
-  
-  cues$p<- exp(-(cues$dist/tau_true)^2)  # Probability each cue is detected
-  cues$detected <- rbinom(nrow(cues),1,cues$p) # binary variable: was cue actually detected?
-  
-  # ------------------------------------
-  # Isolate first detected cue for each bird
-  # ------------------------------------
-  
-  dat <- subset(cues,detected == 1)
-  dat <- dat[!duplicated(dat$bird_id),]
-  
-  # ------------------------------------
-  # Transcription: distance and time bins
-  # ------------------------------------
-  
   # Randomly select sampling protocol
   rint <- sample(distance_protocols,1)[[1]]
   tint <- sample(time_protocols,1)[[1]]
   nrint <- length(rint)
   ntint <- length(tint)
   
-  # Separate into distance and time bins
-  dat$rint <- cut(dat$dist,c(0,rint))
-  dat$tint <- cut(dat$time,c(0,tint))
-  dat <- na.omit(dat)
-  
-  Y <- table(dat[,c("rint","tint")])
-  
-  Y # Data to analyze
-  Yarray[k,1:nrint,1:ntint] <- Y
-  print(k)
-  
   rarray[k,1:length(rint)] <- rint
   tarray[k,1:length(tint)] <- tint
+  
+  # ------------------------------------
+  # Place birds on landscape around observer (centred on landscape)
+  # ------------------------------------
+  dim <- 10 # landscape x and y dimensions (100 metre increments)
+  N <- rpois(1,Density_true*dim^2) # Number of birds to place on landscape
+  
+  if (N>0){
+    birds <- data.frame(x = runif(N,-dim/2,dim/2),
+                        y = runif(N,-dim/2,dim/2))
+    
+    # Distances to observer
+    birds$dist <- sqrt(birds$x^2 + birds$y^2)
+    birds <- birds %>% arrange(dist)
+    birds$bird_id = 1:nrow(birds)
+    
+    # ------------------------------------
+    # Simulate bird cues, based on phi_true
+    # ------------------------------------
+    
+    cues <- matrix(NA, nrow=N, ncol = 50)
+    for (bird_id in 1:N) cues[bird_id,] <- cumsum(rexp(ncol(cues),phi_true))
+    cues <- cues %>% 
+      reshape2::melt() %>% 
+      rename(bird_id = Var1, cue_number = Var2, time = value) %>%
+      arrange(bird_id,cue_number)
+    
+    cues$dist <- birds$dist[cues$bird_id]
+    
+    # ------------------------------------
+    # Determine which cues are detected, based on tau_true
+    # ------------------------------------
+    
+    cues$p<- exp(-(cues$dist/tau_true)^2)  # Probability each cue is detected
+    cues$detected <- rbinom(nrow(cues),1,cues$p) # binary variable: was cue actually detected?
+    
+    # ------------------------------------
+    # Isolate first detected cue for each bird
+    # ------------------------------------
+    
+    dat <- subset(cues,detected == 1)
+    dat <- dat[!duplicated(dat$bird_id),]
+    
+    
+    
+    # Separate into distance and time bins
+    dat$rint <- cut(dat$dist,c(0,rint))
+    dat$tint <- cut(dat$time,c(0,tint))
+    dat <- na.omit(dat)
+    
+    Y <- table(dat[,c("rint","tint")])
+    Yarray[k,1:nrint,1:ntint] <- Y
+    
+  } else{
+    Yarray[k,1:nrint,1:ntint] <- 0
+  }
+  
+  print(k)
   
 }
 
 # ******************************************
-# FIT MODEL TO SIMULATED DATA (only first 1000 point counts)
+# Fit detectability model to simulated data
 # ******************************************
 
-
-Yarray_fit <- Yarray[1:1000,,]
-rarray_fit <- rarray[1:1000,]
-tarray_fit <- tarray[1:1000,]
-X1_fit <- X1[1:1000,]
-X2_fit <- X2[1:1000,]
-
 start <- Sys.time()
-fit <- cmulti.fit.joint(Yarray_fit,
-                        rarray_fit,
-                        tarray_fit,
-                        X1 = X1_fit, # Design matrix for tau
-                        X2 = X2_fit  # Design matrix for phi
+fit <- cmulti.fit.joint(Yarray,
+                        rarray,
+                        tarray,
+                        X1 = X1, # Design matrix for tau
+                        X2 = X2  # Design matrix for phi
 )
 end <- Sys.time()
-print(end-start) # 2.3 min
+print(end-start) # 
 
 # ******************************************
 # Extract/inspect estimates
