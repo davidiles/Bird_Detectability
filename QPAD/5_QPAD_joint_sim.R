@@ -142,7 +142,7 @@ for (k in 1:nsurvey){
     # Simulate bird cues, based on phi_true
     # ------------------------------------
     
-    cues <- matrix(NA, nrow=N, ncol = 50)
+    cues <- matrix(NA, nrow=N, ncol = 150)
     for (bird_id in 1:N) cues[bird_id,] <- cumsum(rexp(ncol(cues),phi_true))
     cues <- cues %>% 
       reshape2::melt() %>% 
