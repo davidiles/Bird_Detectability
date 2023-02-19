@@ -11,6 +11,14 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
   
   logdmultinom <- function (x, size, prob) {lgamma(size + 1) + sum(x * log(prob) - lgamma(x + 1))}
   
+  ## robust matrix inversion (from detect pacakge)
+  .solvenear <- function(x) {
+    xinv <- try(solve(x), silent = TRUE)
+    if (inherits(xinv, "try-error"))
+      xinv <- as.matrix(solve(Matrix::nearPD(x)$mat))
+    xinv
+  }
+  
   input_data <- list(Yarray = Yarray,
                      rarray = rarray,
                      tarray = tarray,
@@ -135,14 +143,13 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
   
   rval <- list(input_data = input_data,
                coefficients = res$par, 
-               #vcov = try(.solvenear(res$hessian)), 
+               vcov = try(.solvenear(res$hessian)), 
                loglik = -res$value)
   
-  #if (inherits(rval$vcov, "try-error")) rval$vcov <- matrix(NA, length(rval$coefficients), length(rval$coefficients))
-  rval$coefficients <- unname(rval$coefficients)
-  rval$vcov <- unname(rval$vcov)
+  if (inherits(rval$vcov, "try-error")) rval$vcov <- matrix(NA, length(rval$coefficients), length(rval$coefficients))
   rval$results <- res
   rval
+  
 }
 
 calculate.offsets <- function (fit,
