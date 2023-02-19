@@ -30,14 +30,14 @@ source("joint_fns.R")
 # ----------------------------------------------------------
 
 # Number of point counts / survey locations to simulate
-nsurvey = 10000 
+nsurvey = 1000 
 
 # Mean annual temperature at each survey
 covariate.MAT <- runif(nsurvey,0,25)
 
 # Parameters controlling the quadratic
 A <- -0.01     # steepness
-k <- log(0.5)  # maximum of quadratic  
+k <- log(1)  # maximum of quadratic  
 h <- 10        # x location of vertex
 
 # Phi for each survey
@@ -196,14 +196,9 @@ sum(Ysum>0)
 # -------------------------------------------------
 # Bootstrap
 # -------------------------------------------------
-MATmn <- mean(covariate.MAT)
-MATsd <- sd(covariate.MAT)
 
-predMAT <- seq(0,25,length.out = 500)
-predMATz <- (predMAT-MATmn)/MATsd
-
-bootreps <- 200
-Dhat_matrix <- matrix(NA,nrow=bootreps,ncol=length(predMATz))
+bootreps <- 100
+Dhat_boot <- tau_boot <- phi_boot <- matrix(NA,nrow=bootreps,ncol=500)
 
 for (b in 1:bootreps){
 
@@ -229,6 +224,27 @@ for (b in 1:bootreps){
                                    X1 = X1boot,
                                    X2 = X2boot)
   
+  # Predictions of tau across range of FC
+  FCmn <- mean(covariate.FC)
+  FCsd <- sd(covariate.FC)
+  predFC <- seq(min(covariate.FC),max(covariate.FC),length.out = 500)
+  predFCz <- (predFC-FCmn)/FCsd
+  predX1 <- model.matrix(~predFCz)
+  tauhat <- exp(predX1 %*% fit$coefficients[1:ncol(X1)])
+  tau_boot[b,] <- tauhat
+  
+  # Predictions of phi across range of DOY
+  DOYmn <- mean(covariate.DOY)
+  DOYsd <- sd(covariate.DOY)
+  predDOY <- seq(min(covariate.DOY),max(covariate.DOY),length.out = 500)
+  predDOYz <- (predDOY-DOYmn)/DOYsd
+  predX2 <- model.matrix(~predDOYz+I(predDOYz^2))
+  phihat <- exp(predX2 %*% fit$coefficients[(ncol(X1)+1):length(fit$coefficients)])
+  phi_boot[b,] <- phihat
+  
+  # Predictions of density across range of values of MAT
+  MATmn <- mean(covariate.MAT)
+  MATsd <- sd(covariate.MAT)
   MATboot <- covariate.MAT[bootsamps]
   zMATboot <- (MATboot - MATmn)/MATsd
   dat <- data.frame(Y = apply(Yboot,1,sum,na.rm = TRUE),
@@ -237,20 +253,23 @@ for (b in 1:bootreps){
   
   glm1 <- glm(Y ~ zMAT + I(zMAT^2) + offset(log_off), family = poisson(link="log"), data = dat)
   
-  # Predict density across values of zMAT
+  predMAT <- seq(0,25,length.out = 500)
+  predMATz <- (predMAT-MATmn)/MATsd
   pred_df <- data.frame(zMAT = predMATz,log_off = 0)
   Dhat <- predict(glm1, newdata = pred_df, type = "response")
-  Dhat_matrix[b,] <- Dhat
+  Dhat_boot[b,] <- Dhat
+  
+  
   print(b)
 }
 
 # Summarize results
 
-Dhat_mean <- apply(Dhat_matrix,2,mean,na.rm = TRUE)
-Dhat_lcl <- apply(Dhat_matrix,2,function(x)quantile(x,0.05,na.rm = TRUE))
-Dhat_ucl <- apply(Dhat_matrix,2,function(x)quantile(x,0.95,na.rm = TRUE))
+Dhat_mean <- apply(Dhat_boot,2,mean,na.rm = TRUE)
+Dhat_lcl <- apply(Dhat_boot,2,function(x)quantile(x,0.05,na.rm = TRUE))
+Dhat_ucl <- apply(Dhat_boot,2,function(x)quantile(x,0.95,na.rm = TRUE))
 
-result_plot <- ggplot()+
+Density_plot <- ggplot()+
   geom_ribbon(aes(x = predMAT,ymin=Dhat_lcl,ymax=Dhat_ucl), 
               fill = "dodgerblue",
               col="transparent",
@@ -258,4 +277,4 @@ result_plot <- ggplot()+
   geom_line(aes(x = predMAT,y = Dhat_mean),col="dodgerblue")+
   geom_line(aes(x = covariate.MAT, y = Density))+
   theme_bw()
-print(result_plot)
+print(Density_plot)
