@@ -11,7 +11,7 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
   
   logdmultinom <- function (x, size, prob) {lgamma(size + 1) + sum(x * log(prob) - lgamma(x + 1))}
   
-  ## robust matrix inversion (from detect pacakge)
+  ## robust matrix inversion (from detect package)
   .solvenear <- function(x) {
     xinv <- try(solve(x), silent = TRUE)
     if (inherits(xinv, "try-error"))
@@ -33,7 +33,9 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
     Yarray <- Yarray[Ykeep, , ]
     rarray<- rarray[Ykeep, ]
     tarray<- tarray[Ykeep, ]
+    Ysum <- Ysum[Ykeep]
   }
+  
   nsurvey <- dim(Yarray)[1] # Number of surveys
   nrint <- apply(rarray,1,function(x)length(na.omit(x))) # Number of distance bins for each point count
   ntint <- apply(tarray,1,function(x)length(na.omit(x))) # Number of time bins for each point count
@@ -130,8 +132,8 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
       
       # Normalize
       p_matrix = p_matrix/sum(p_matrix)
-      
       nll[k] <- logdmultinom(Y, Ysum[k], p_matrix)
+      
     } # close loop on k
     
     nll <- -sum(nll)
@@ -151,6 +153,8 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
   rval
   
 }
+
+
 
 calculate.offsets <- function (fit,
                                rarray = rarray,
@@ -220,6 +224,7 @@ calculate.offsets <- function (fit,
       for (i in 1:nrint[k]){
         upper_r = rarray[k,i]
         if (upper_r == Inf) upper_r = max_r[k]
+        
         CDF_binned[i,j] = integrate(f_d,lower=0.01,
                                     upper = upper_r,
                                     subdivisions = 500)$value
