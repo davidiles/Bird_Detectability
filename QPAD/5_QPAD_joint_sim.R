@@ -165,8 +165,6 @@ for (k in 1:nsurvey){
     dat <- subset(cues,detected == 1)
     dat <- dat[!duplicated(dat$bird_id),]
     
-    
-    
     # Separate into distance and time bins
     dat$rint <- cut(dat$dist,c(0,rint))
     dat$tint <- cut(dat$time,c(0,tint))

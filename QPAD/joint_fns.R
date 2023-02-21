@@ -19,6 +19,8 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
     xinv
   }
   
+  # Keep track of the data we put in initially
+  # (not sure this part of the script is absolutely necessary... just for helping me sanity check)
   input_data <- list(Yarray = Yarray,
                      rarray = rarray,
                      tarray = tarray,
@@ -26,7 +28,10 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
                      X2 = X2,
                      maxdistint = maxdistint)
   
+  # ----------------------------
   # Only conduct analysis on point counts with non-zero total counts
+  # ----------------------------
+  
   Ysum <- apply(Yarray,1,sum,na.rm = TRUE)
   Ykeep <- which(Ysum > 0)
   if (length(Ykeep) != length(Ysum)){
@@ -97,17 +102,20 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
       }
       
       # Calculate CDF
-      Y <- Yarray[k,1:nrint[k],1:ntint[k]]
+      Y <- Yarray[k,1:nrint[k],1:ntint[k]] # Data for this survey
+      
       CDF_binned <- matrix(NA,nrow=nrint[k],ncol=ntint[k])
+      
       for (j in 1:ntint[k]){
         
-        tmax = max(tarray[k,j])
+        tmax = tarray[k,j] # How many minutes have elapsed so far?
         
         for (i in 1:nrint[k]){
-          upper_r = rarray[k,i]
-          if (upper_r == Inf) upper_r = max_r[k]
           
-          # Integrate from 1 m from the observer
+          upper_r = rarray[k,i] # what is maximum distance so far
+          if (upper_r == Inf) upper_r = max_r[k] # could be simplified earlier in script
+          
+          # Integrate from 1 m from the observer (seems like integration sometimes crashes if set to 0?)
           CDF_binned[i,j] = integrate(f_d,lower=0.01,
                                       upper = upper_r, 
                                       subdivisions = 500)$value
@@ -130,20 +138,30 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
         }
       }
       
-      # Normalize
+      # This p_matrix gives us the expected total number of birds detected during the point count
+      # if Density = 1, given particular values of phi and tau
+      p_matrix
+      
+      # Normalize the p_matrix to yield the multinomial cell probabilities
       p_matrix = p_matrix/sum(p_matrix)
+      
+      # Calculate the multinomial log likelihood for this point count
       nll[k] <- logdmultinom(Y, Ysum[k], p_matrix)
       
     } # close loop on k
     
     nll <- -sum(nll)
+    
     if (nll %in% c(NA, NaN, Inf, -Inf)) nlimit[2] else nll
+    
   }
   
   nlimit <- c(.Machine$double.xmin, .Machine$double.xmax)^(1/3)
+  
   res <- optim(inits, nll.fun, method = method, hessian = TRUE)
   
   rval <- list(input_data = input_data,
+               convergence = res$convergence,
                coefficients = res$par, 
                vcov = try(.solvenear(res$hessian)), 
                loglik = -res$value)
@@ -200,7 +218,7 @@ calculate.offsets <- function (fit,
   phi <- poisson("log")$linkinv(drop(X2 %*% phi_params))
   
   # Calculate offsets for each survey
-  p <- A <- rep(NA,nsurvey)
+  p <- rep(NA,nsurvey)
   
   for (k in 1:nsurvey){
     
@@ -247,8 +265,8 @@ calculate.offsets <- function (fit,
       }
     }
     
+    # This is the expected total number of birds detected during this survey if the true density was 1
     p[k] <- sum(p_matrix)
-    A[k] <- pi*max_r[k]^2
   }
   
   log_offset <- log(p)
