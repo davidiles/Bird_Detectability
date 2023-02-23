@@ -190,6 +190,16 @@ Ysum <- apply(Yarray,1,sum,na.rm=TRUE)
 # Number of point counts that detected at least one bird
 sum(Ysum>0)
 
+# Take a look at a few simulated point counts
+
+Yarray[1,,] # Data from first point count
+rarray[1,]  # Distance bins used for the first point count
+tarray[1,]  # Time bins used for the first point count
+
+Yarray[4,,] # Data from 4th point count
+rarray[4,]  # Distance bins used for the 4th point count
+tarray[4,]  # Time bins used for the 4th point count
+
 # -------------------------------------------------
 # Create covariate design matrices
 # -------------------------------------------------
