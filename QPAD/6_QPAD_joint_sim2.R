@@ -14,10 +14,10 @@ rm(list=ls())
 setwd("~/1_Work/Bird_Detectability/QPAD") # <- set to wherever scripts are stored
 source("joint_fns.R")
 
-result_df <- expand.grid(sim_rep = 1:100,
-                         tau = seq(0.2,2,0.4),
-                         phi = c(0.1,0.5,2.5),
-                         Density = c(0.1,0.5,2.5),
+result_df <- expand.grid(sim_rep = 1:500,
+                         tau = seq(0.25,2.25,0.5),
+                         phi = c(0.25,2.5),
+                         Density = c(0.1,2.5),
                          
                          tau_est_joint = NA,
                          phi_est_joint = NA,
@@ -33,13 +33,14 @@ result_df <- expand.grid(sim_rep = 1:100,
                          
 )
 
-for (sim_rep in 1:nrow(result_df)){
+for (i in 1:nrow(result_df)){
+  
+  sim_rep = result_df$sim_rep[i]
+  Density <- result_df$Density[i]
+  tau <- result_df$tau[i]
+  phi <- result_df$phi[i]
   
   set.seed(sim_rep)
-  
-  Density <- result_df$Density[sim_rep]
-  tau <- result_df$tau[sim_rep]
-  phi <- result_df$phi[sim_rep]
   
   # Number of point counts / survey locations to simulate
   nsurvey = 1 
@@ -139,14 +140,15 @@ for (sim_rep in 1:nrow(result_df)){
     Y <- table(dat[,c("rint","tint")])
     Y # Data to analyze
     
-    
     Yarray[k,1:nrint,1:ntint] <- Y
     rarray[k,1:length(rint)] <- rint
     tarray[k,1:length(tint)] <- tint
     
   }
+  Ysum <- sum(Yarray)
+  result_df$Ysum[i] <- Ysum
   
-  result_df$Ysum[sim_rep] <- sum(Yarray)
+  if (Ysum == 0) next # Species was never detected at any point counts
   
   # ******************************************
   # FIT JOINT MODEL AND ESTIMATE DENSITY
@@ -170,10 +172,10 @@ for (sim_rep in 1:nrow(result_df)){
                                   X2 = NULL)
   
   # Estimates
-  result_df$tau_est_joint[sim_rep] <- exp(fit$coefficients[1])
-  result_df$phi_est_joint[sim_rep] <- exp(fit$coefficients[2])
-  result_df$log_offset_joint[sim_rep] <- log_offset
-  result_df$Density_est_joint[sim_rep] <- (sum(Yarray)/exp(log_offset))/1000
+  result_df$tau_est_joint[i] <- exp(fit$coefficients[1])
+  result_df$phi_est_joint[i] <- exp(fit$coefficients[2])
+  result_df$log_offset_joint[i] <- log_offset
+  result_df$Density_est_joint[i] <- (sum(Yarray)/exp(log_offset))/1000
   
   # ******************************************
   # FIT INDEPENDENT DISTANCE AND REMOVAL MODELS
@@ -192,22 +194,23 @@ for (sim_rep in 1:nrow(result_df)){
     p_hat = 1-exp(-max(tarray)*phi_indep)
     D_hat <- sum(Yarray)/(A_hat*p_hat)
     
-    result_df$tau_est_indep[sim_rep] <- tau_indep
-    result_df$phi_est_indep[sim_rep] <- phi_indep
-    result_df$Density_est_indep[sim_rep] <- D_hat/1000
+    result_df$tau_est_indep[i] <- tau_indep
+    result_df$phi_est_indep[i] <- phi_indep
+    result_df$Density_est_indep[i] <- D_hat/1000
   },
   error = function(e){
     
   }
   )
-  print(sim_rep)
+  print(i)
   
 }
 
 result_df$tau_label = paste0("Tau = ",result_df$tau)
 result_df$phi_label = paste0("Phi = ",result_df$phi)
 result_df$Density_label = paste0("True Density = ",result_df$Density)
-save(result_df,file="results/QPAD_joint_sim3.R")
+
+# save(result_df,file="results/QPAD_joint_sim3.R")
 
 median_results <- result_df %>%
   group_by(tau_label,phi_label,Density_label) %>%

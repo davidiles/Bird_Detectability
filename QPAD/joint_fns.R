@@ -35,9 +35,9 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
   Ysum <- apply(Yarray,1,sum,na.rm = TRUE)
   Ykeep <- which(Ysum > 0)
   if (length(Ykeep) != length(Ysum)){
-    Yarray <- Yarray[Ykeep, , ]
-    rarray<- rarray[Ykeep, ]
-    tarray<- tarray[Ykeep, ]
+    Yarray <- Yarray[Ykeep, , ] %>% array(.,dim=c(length(Ykeep),dim(Yarray)[2],dim(Yarray)[3]))
+    rarray<- rarray[Ykeep, ] %>% array(.,dim=c(length(Ykeep),dim(Yarray)[2]))
+    tarray<- tarray[Ykeep, ] %>% array(.,dim=c(length(Ykeep),dim(Yarray)[3]))
     Ysum <- Ysum[Ykeep]
   }
   
@@ -64,7 +64,7 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
   
   # Calculate maximum distance for integration at each point count
   max_r <- apply(rarray,1,max,na.rm = TRUE)
-  max_r[max_r == Inf] <- maxdistint
+  #max_r[max_r == Inf] <- maxdistint
   
   # Initial values
   if (length(tau_inits) != ncol(X1)) tau_inits <- NULL
@@ -112,13 +112,13 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
         
         for (i in 1:nrint[k]){
           
-          upper_r = rarray[k,i] # what is maximum distance so far
-          if (upper_r == Inf) upper_r = max_r[k] # could be simplified earlier in script
+          #upper_r = rarray[k,i] # what is maximum distance so far
+          #if (upper_r == Inf) upper_r = max_r[k] # could be simplified earlier in script
           
           # Integrate from 1 m from the observer (seems like integration sometimes crashes if set to 0?)
           CDF_binned[i,j] = integrate(f_d,lower=0.01,
-                                      upper = upper_r, 
-                                      subdivisions = 500)$value
+                                      upper = rarray[k,i], 
+                                      subdivisions = 1000)$value
         }
       }
       
@@ -173,7 +173,6 @@ cmulti.fit.joint <- function (Yarray, # Array with dimensions (nsurvey x nrint x
 }
 
 
-
 calculate.offsets <- function (fit,
                                rarray = rarray,
                                tarray = tarray,
@@ -185,7 +184,6 @@ calculate.offsets <- function (fit,
   tarray_fit = fit$input_data$tarray
   X1_fit = fit$input_data$X1
   X2_fit = fit$input_data$X2
-  maxdistint = fit$input_data$maxdistint
   
   nsurvey <- dim(rarray)[1] # Number of surveys
   nrint <- apply(rarray,1,function(x)length(na.omit(x))) # Number of distance bins for each point count
@@ -208,7 +206,6 @@ calculate.offsets <- function (fit,
   
   # Calculate maximum distance for integration at each point count
   max_r <- apply(rarray,1,max,na.rm = TRUE)
-  max_r[max_r == Inf] <- maxdistint
   
   # Tau and phi
   tau_params <- fit$coefficients[1:length(tau_params)]
@@ -240,12 +237,12 @@ calculate.offsets <- function (fit,
       tmax = max(tarray[k,j])
       
       for (i in 1:nrint[k]){
-        upper_r = rarray[k,i]
-        if (upper_r == Inf) upper_r = max_r[k]
+        #upper_r = rarray[k,i]
+        #if (upper_r == Inf) upper_r = max_r[k]
         
-        CDF_binned[i,j] = integrate(f_d,lower=0.01,
-                                    upper = upper_r,
-                                    subdivisions = 500)$value
+        CDF_binned[i,j] = integrate(f_d,lower=0,
+                                    upper = rarray[k,i],
+                                    subdivisions = 1000)$value
       }
     }
     
@@ -271,4 +268,96 @@ calculate.offsets <- function (fit,
   
   log_offset <- log(p)
   log_offset
+  
+  # Note that EDR = sqrt(p/pi)
+  
+  
 }
+
+
+# calculate.EDR <- function (fit,
+#                            rarray = rarray,
+#                            tarray = tarray,
+#                            X1 = NULL,
+#                            X2 = NULL) {
+#   
+#   nsurvey <- dim(rarray)[1] # Number of surveys
+#   nrint <- apply(rarray,1,function(x)length(na.omit(x))) # Number of distance bins for each point count
+#   ntint <- apply(tarray,1,function(x)length(na.omit(x))) # Number of time bins for each point count
+#   
+#   
+#   if (!is.null(X1)){
+#     tau_params <- colnames(X1)
+#   } else {
+#     X1 <- matrix(1,nrow = nsurvey,ncol=1)
+#     tau_params <- colnames(X1)[1] <- "log_tau"
+#   }
+#   
+#   if (!is.null(X2)){
+#     phi_params <- colnames(X2)
+#   } else {
+#     X2 <- matrix(1,nrow = nsurvey,ncol=1)
+#     phi_params <- colnames(X2)[1] <- "log_phi"
+#   }
+#   
+#   # Tau and phi for each survey
+#   tau_params <- fit$coefficients[1:length(tau_params)]
+#   phi_params <- fit$coefficients[(length(tau_params)+1):length(fit$coefficients)]
+#   
+#   tau <- poisson("log")$linkinv(drop(X1 %*% tau_params))
+#   phi <- poisson("log")$linkinv(drop(X2 %*% phi_params))
+#   
+#   # Calculate EDR for each survey
+#   EDR <- rep(NA,nsurvey)
+#   
+#   for (k in 1:nsurvey){
+#     
+#     tau_k <- tau[k]
+#     phi_k <- phi[k]
+#     
+#     # Function to calculate total number of birds that are actually present, up to distance d
+#     f_t = function(dmax){
+#       integrand = expression(2*pi*dmax)
+#       eval(integrand)
+#     }
+#     
+#     # Function to calculate total number of birds detected up to distance d
+#     f_d = function(dmax){
+#       integrand = substitute(2*pi*dmax *(1-exp(-phi*tmax*exp(-dmax^2/tau^2))),
+#                              list(phi = phi_k,tau = tau_k,tmax = tmax))
+#       eval(integrand)
+#     }
+#     
+#     
+#     # Total duration of point count
+#     tmax <- tarray[k,ntint[k]]
+#     
+#     # Total number detected during point count
+#     Total_D <- integrate(f_d,lower=0,upper = Inf,subdivisions = 1000)$value
+#     
+#     distances <- seq(0,10,length.out = 10000)
+#     
+#     Tvec <- Dvec <-  rep(NA,length(distances))
+#     for (i in 1:length(distances)){
+#       Tvec[i] <- integrate(f_t,lower=0,upper = distances[i],subdivisions = 1000)$value
+#       Dvec[i] <- integrate(f_d,lower=0,upper = distances[i],subdivisions = 1000)$value
+#     }
+#     
+#     # Tvec contains total number of birds within each distance radius
+#     # Dvec contains total number of birds *detected* within each distance radius
+#     
+#     # Proportion detected inside = Dvec/Tvec
+#     # Number missed inside = Tvec-Dvec; proportion missed inside = 1-Dvec/Tvec
+#     N_missed_inside <- Tvec-Dvec
+#     
+#     # Number detected outside radius
+#     N_detected_outside <- Total_D - Dvec
+#     
+#     # Find which distance has the minimum difference between N_missed_inside and N_detected_outside
+#     diffs <- abs(N_missed_inside - N_detected_outside)
+#     EDR[k] <- distances[which.min(diffs)]
+#     
+#   }
+#   
+#   EDR
+# }
