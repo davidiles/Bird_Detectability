@@ -107,9 +107,17 @@ for (k in 1:nsurvey){
   phi_true <- phi[k]
   Density_true <- Density[k]
   
+  # Determine if this will be a human or ARU survey
+  ARU <- sample(c(TRUE,FALSE),1,prob=c(0.5,0.5))
+  if (ARU){
+    rint <- Inf
+    tint <- seq(1,10)
+  } else{
+    rint <- c(0.5,1,Inf)
+    tint <- seq(1,10)
+  }
+  
   # Randomly select sampling protocol
-  rint <- sample(distance_protocols,1)[[1]]
-  tint <- sample(time_protocols,1)[[1]]
   nrint <- length(rint)
   ntint <- length(tint)
   
@@ -196,9 +204,9 @@ Yarray[1,,] # Data from first point count
 rarray[1,]  # Distance bins used for the first point count
 tarray[1,]  # Time bins used for the first point count
 
-Yarray[4,,] # Data from 4th point count
-rarray[4,]  # Distance bins used for the 4th point count
-tarray[4,]  # Time bins used for the 4th point count
+Yarray[2,,] # Data from 4th point count
+rarray[2,]  # Distance bins used for the 4th point count
+tarray[2,]  # Time bins used for the 4th point count
 
 # -------------------------------------------------
 # Create covariate design matrices
@@ -223,12 +231,11 @@ start <- Sys.time()
 fit <- cmulti_fit_joint(Yarray,
                         rarray,
                         tarray,
-                        X1 = X1, # Design matrix for tau
-                        X2 = X2  # Design matrix for phi
+                        X1 = NULL, # Design matrix for tau
+                        X2 = NULL # Design matrix for phi
 )
 end <- Sys.time()
 print(end-start) # 1.7 minutes on my personal laptop
-
 
 coef_estimates <- fit$coefficients
 

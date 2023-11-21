@@ -271,93 +271,174 @@ calculate.offsets <- function (fit,
   
   # Note that EDR = sqrt(p/pi)
   
-  
 }
 
-
-# calculate.EDR <- function (fit,
-#                            rarray = rarray,
-#                            tarray = tarray,
-#                            X1 = NULL,
-#                            X2 = NULL) {
-#   
-#   nsurvey <- dim(rarray)[1] # Number of surveys
-#   nrint <- apply(rarray,1,function(x)length(na.omit(x))) # Number of distance bins for each point count
-#   ntint <- apply(tarray,1,function(x)length(na.omit(x))) # Number of time bins for each point count
-#   
-#   
-#   if (!is.null(X1)){
-#     tau_params <- colnames(X1)
-#   } else {
-#     X1 <- matrix(1,nrow = nsurvey,ncol=1)
-#     tau_params <- colnames(X1)[1] <- "log_tau"
-#   }
-#   
-#   if (!is.null(X2)){
-#     phi_params <- colnames(X2)
-#   } else {
-#     X2 <- matrix(1,nrow = nsurvey,ncol=1)
-#     phi_params <- colnames(X2)[1] <- "log_phi"
-#   }
-#   
-#   # Tau and phi for each survey
-#   tau_params <- fit$coefficients[1:length(tau_params)]
-#   phi_params <- fit$coefficients[(length(tau_params)+1):length(fit$coefficients)]
-#   
-#   tau <- poisson("log")$linkinv(drop(X1 %*% tau_params))
-#   phi <- poisson("log")$linkinv(drop(X2 %*% phi_params))
-#   
-#   # Calculate EDR for each survey
-#   EDR <- rep(NA,nsurvey)
-#   
-#   for (k in 1:nsurvey){
-#     
-#     tau_k <- tau[k]
-#     phi_k <- phi[k]
-#     
-#     # Function to calculate total number of birds that are actually present, up to distance d
-#     f_t = function(dmax){
-#       integrand = expression(2*pi*dmax)
-#       eval(integrand)
-#     }
-#     
-#     # Function to calculate total number of birds detected up to distance d
-#     f_d = function(dmax){
-#       integrand = substitute(2*pi*dmax *(1-exp(-phi*tmax*exp(-dmax^2/tau^2))),
-#                              list(phi = phi_k,tau = tau_k,tmax = tmax))
-#       eval(integrand)
-#     }
-#     
-#     
-#     # Total duration of point count
-#     tmax <- tarray[k,ntint[k]]
-#     
-#     # Total number detected during point count
-#     Total_D <- integrate(f_d,lower=0,upper = Inf,subdivisions = 1000)$value
-#     
-#     distances <- seq(0,10,length.out = 10000)
-#     
-#     Tvec <- Dvec <-  rep(NA,length(distances))
-#     for (i in 1:length(distances)){
-#       Tvec[i] <- integrate(f_t,lower=0,upper = distances[i],subdivisions = 1000)$value
-#       Dvec[i] <- integrate(f_d,lower=0,upper = distances[i],subdivisions = 1000)$value
-#     }
-#     
-#     # Tvec contains total number of birds within each distance radius
-#     # Dvec contains total number of birds *detected* within each distance radius
-#     
-#     # Proportion detected inside = Dvec/Tvec
-#     # Number missed inside = Tvec-Dvec; proportion missed inside = 1-Dvec/Tvec
-#     N_missed_inside <- Tvec-Dvec
-#     
-#     # Number detected outside radius
-#     N_detected_outside <- Total_D - Dvec
-#     
-#     # Find which distance has the minimum difference between N_missed_inside and N_detected_outside
-#     diffs <- abs(N_missed_inside - N_detected_outside)
-#     EDR[k] <- distances[which.min(diffs)]
-#     
-#   }
-#   
-#   EDR
-# }
+cmulti.fit.joint2 <- function (Yarray, # Array with dimensions (nsurvey x nrint x ntint)
+                               rarray, # distance intervals for each point count
+                               tarray, # time intervals for each point count
+                               
+                               X1 = NULL,
+                               X2 = NULL,
+                               X3 = NULL, 
+                               
+                               tau_A_inits = NULL,
+                               tau_B_inits = NULL,
+                               phi_inits = NULL,
+                               
+                               method = "Nelder-Mead", ...) {
+  
+  logdmultinom <- function (x, size, prob) {lgamma(size + 1) + sum(x * log(prob) - lgamma(x + 1))}
+  
+  # ----------------------------
+  # Only conduct analysis on point counts with non-zero total counts
+  # ----------------------------
+  
+  Ysum <- apply(Yarray,1,sum,na.rm = TRUE)
+  Ykeep <- which(Ysum > 0)
+  if (length(Ykeep) != length(Ysum)){
+    Yarray <- Yarray[Ykeep, , ] %>% array(.,dim=c(length(Ykeep),dim(Yarray)[2],dim(Yarray)[3]))
+    rarray<- rarray[Ykeep, ] %>% array(.,dim=c(length(Ykeep),dim(Yarray)[2]))
+    tarray<- tarray[Ykeep, ] %>% array(.,dim=c(length(Ykeep),dim(Yarray)[3]))
+    Ysum <- Ysum[Ykeep]
+  }
+  
+  nsurvey <- dim(Yarray)[1] # Number of surveys
+  nrint <- apply(rarray,1,function(x)length(na.omit(x))) # Number of distance bins for each point count
+  ntint <- apply(tarray,1,function(x)length(na.omit(x))) # Number of time bins for each point count
+  
+  # Format parameters and check they are named via column names in design matrix
+  if (!is.null(X1)){
+    X1 <- X1[Ykeep, ]
+    tau_params <- colnames(X1)
+  } else {
+    X1 <- matrix(1,nrow = nsurvey,ncol=1)
+    tau_params <- colnames(X1)[1] <- "log_tau_A"
+  }
+  
+  if (!is.null(X2)){
+    X2 <- X2[Ykeep, ]
+    phi_params <- colnames(X2)
+  } else {
+    X2 <- matrix(1,nrow = nsurvey,ncol=1)
+    phi_params <- colnames(X2)[1] <- "log_tau_B"
+  }
+  
+  if (!is.null(X3)){
+    X3 <- X3[Ykeep, ]
+    phi_params <- colnames(X3)
+  } else {
+    X3 <- matrix(1,nrow = nsurvey,ncol=1)
+    phi_params <- colnames(X3)[1] <- "log_phi"
+  }
+  
+  # Initial values
+  if (length(tau_A_inits) != ncol(X1)) tau_A_inits <- NULL
+  if (is.null(tau_A_inits)) {
+    tau_A_inits <- rep(0, ncol(X1))
+    names(tau_A_inits) <- tau_A_params
+  }
+  
+  if (length(tau_B_inits) != ncol(X2)) tau_B_inits <- NULL
+  if (is.null(tau_B_inits)) {
+    tau_B_inits <- rep(0, ncol(X2))
+    names(tau_B_inits) <- tau_B_params
+  }
+  
+  if (length(phi_inits) != ncol(X3)) phi_inits <- NULL
+  if (is.null(phi_inits)) {
+    phi_inits <- rep(0, ncol(X3))
+    names(phi_inits) <- phi_params
+  }
+  
+  inits <- c(tau_A_inits,tau_B_inits,phi_inits)
+  
+  # Function to calculate multinomial cell probabilities for each point count
+  nll.fun <- function(params) {
+    
+    tau <- poisson("log")$linkinv(drop(X1 %*% params[1:length(tau_params)]))
+    phi <- poisson("log")$linkinv(drop(X2 %*% params[(length(tau_params)+1):length(params)]))
+    
+    nll <- rep(0,nsurvey)
+    
+    for (k in 1:nsurvey){
+      
+      tau_A_k <- tau_A[k]
+      tau_B_k <- tau_B[k]
+      
+      phi_k <- phi[k]
+      
+      # Calculate CDF and p
+      f_d = function(dmax){
+        
+        integrand = substitute(2*pi*dmax * (exp(-(dmax/tau_A)^2)*(1-exp(-phi*tmax)) + (1-exp(-(dmax/tau_A)^2))*(1-exp(-phi*tmax*exp(-(dmax/tau_B)^2)))),
+                               list(phi = phi_k, 
+                                    tau_A = tau_A_k,
+                                    tau_B = tau_B_k,
+                                    tmax = tmax))
+        eval(integrand)
+      }
+      
+      # Calculate CDF
+      Y <- Yarray[k,1:nrint[k],1:ntint[k]] # Data for this survey
+      
+      CDF_binned <- matrix(NA,nrow=nrint[k],ncol=ntint[k])
+      
+      for (j in 1:ntint[k]){
+        
+        tmax = tarray[k,j] # How many minutes have elapsed so far?
+        
+        for (i in 1:nrint[k]){
+          
+          CDF_binned[i,j] = integrate(f_d,lower=0,
+                                      upper = rarray[k,i], 
+                                      subdivisions = 1000)$value
+        }
+      }
+      
+      # Difference across distance bins
+      tmp1 = CDF_binned
+      if (nrow(tmp1)>1){
+        for (i in 2:nrint[k]){
+          tmp1[i,] <- CDF_binned[i,] - CDF_binned[i-1,]
+        }
+      }
+      
+      # Difference across time bins
+      p_matrix = tmp1
+      if (ncol(p_matrix)>1){
+        for (j in 2:ntint[k]){
+          p_matrix[,j] <- tmp1[,j] - tmp1[,j-1]
+        }
+      }
+      
+      # This p_matrix gives us the expected total number of birds detected during the point count
+      # if Density = 1, given particular values of phi and tau
+      p_matrix
+      
+      # Normalize the p_matrix to yield the multinomial cell probabilities
+      p_matrix = p_matrix/sum(p_matrix)
+      
+      # Calculate the multinomial log likelihood for this point count
+      nll[k] <- logdmultinom(Y, Ysum[k], p_matrix)
+      
+    } # close loop on k
+    
+    nll <- -sum(nll)
+    
+    if (nll %in% c(NA, NaN, Inf, -Inf)) nlimit[2] else nll
+    
+  }
+  
+  nlimit <- c(.Machine$double.xmin, .Machine$double.xmax)^(1/3)
+  
+  res <- optim(inits, nll.fun, method = method, hessian = TRUE)
+  
+  rval <- list(input_data = input_data,
+               convergence = res$convergence,
+               coefficients = res$par,  
+               loglik = -res$value)
+  
+  rval$results <- res
+  rval
+  
+}
