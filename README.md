@@ -1,7 +1,7 @@
 # Bird_Detectability
  Development of new approaches for landbird detectability modeling from human point counts.
  
- - Goal is to critically evaluate 'goodness-of-fit' of standard distance and time-removal modeling, and explore alternative parameterizations that may provide better fit.
+Goal is to critically evaluate 'goodness-of-fit' of standard distance and time-removal modeling, and explore alternative parameterizations that may provide better fit.
 
 
 **Notes**
