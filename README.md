@@ -5,6 +5,7 @@
 
 
 **Notes**
+
 *2023-11-22*
 - "current" analysis is in Analysis folder
 - goodness of fit of standard models seems poor (many extra birds are detected in the first minute compared to predictions, and then subsequently less)
