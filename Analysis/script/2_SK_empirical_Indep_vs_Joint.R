@@ -11,7 +11,7 @@ rm(list=ls())
 theme_set(theme_bw())
 
 setwd("C:/Users/IlesD/OneDrive - EC-EC/Iles/Projects/Landbirds/Bird_Detectability/Analysis/script")
-source("0_model_fns.R")
+source("0_model_fns_new.R")
 
 `%!in%` <- Negate(`%in%`)
 
@@ -105,13 +105,17 @@ dat$Day <- yday(dat$DateTime)
 survey_info <- dat %>%
   group_by(SurveyID) %>%
   summarize(Duration = mean(Duration),
-            SurveyType = SurveyType[1])
+            SurveyType = SurveyType[1],
+            Hour = mean(Hour),
+            Day = mean(Day))
 # Survey summary
 table(survey_info[,c("Duration","SurveyType")])
 
 human_surveys <- survey_info$SurveyID[survey_info$SurveyType == "HUM"]
 ARU_surveys <- survey_info$SurveyID[survey_info$SurveyType == "ARU"]
 
+survey_info$zDay <- scale(survey_info$Day)
+survey_info$zHour <- scale(survey_info$Hour)
 
 # -------------------------------------------------------------
 # Create rarray and tarrays
@@ -133,8 +137,8 @@ for (k in 1:nsurvey){
 }
 
 # All surveys are the same format, so simplify the analysis
-rarray <- array(rarray[1,],dim=c(1,ncol(rarray)))
-tarray <- array(tarray[1,],dim=c(1,ncol(tarray)))
+#rarray <- array(rarray[1,],dim=c(1,ncol(rarray)))
+#tarray <- array(tarray[1,],dim=c(1,ncol(tarray)))
 
 # **********************************************************************
 # **********************************************************************
@@ -148,9 +152,11 @@ species_results_p <- data.frame()
 for (sp in species_to_include$Species){
   
   # Generate Yarray for this species
-  Yarray <- array(0,dim=c(1,length(rarray),length(tarray)))
+  Yarray <- array(0,dim=c(nsurvey,ncol(rarray),ncol(tarray)))
   
-  X_phi <- matrix(NA,nrow=)
+  X_phi <- model.matrix(~survey_info$zDay + survey_info$zHour)
+  colnames(X_phi) <- c("phi_intercept","phi_zDay","phi_zHour")
+  
   # Fill Yarray with counts
   for (k in 1:nsurvey){
     dat_survey <- subset(dat, SurveyID == k)
@@ -161,10 +167,10 @@ for (sp in species_to_include$Species){
     dat_survey_sp <- subset(dat_survey, Species == sp)
     
     # If this survey did not detect the species, skip
-    if (nrow(dat_survey_sp)==0) next
+    #if (nrow(dat_survey_sp)==0) next
     
     for (i in 1:nrow(dat_survey_sp)){
-      Yarray[1,dat_survey_sp$DistBin[i],dat_survey_sp$TimeBin[i]] <- Yarray[1,dat_survey_sp$DistBin[i],dat_survey_sp$TimeBin[i]] + dat_survey_sp$Count[i]
+      Yarray[k,dat_survey_sp$DistBin[i],dat_survey_sp$TimeBin[i]] <- Yarray[1,dat_survey_sp$DistBin[i],dat_survey_sp$TimeBin[i]] + dat_survey_sp$Count[i]
     }
     
   }
@@ -174,192 +180,193 @@ for (sp in species_to_include$Species){
   # ****************************************************************
   
   start_IJ <- Sys.time()
-  fit_IJ <- fit_IJ_fn(Yarray = Yarray, 
+  fit_IJ <- fit_Ind_fn(Yarray = Yarray, 
                       rarray = rarray, 
                       tarray = tarray,
-                      tau_inits = 0,
-                      phi_inits = 0
+                      X2 = X_phi
   )
+  end_IJ <- Sys.time() # 4 min
   
-  tau_est_IJ <- exp(fit_IJ$coefficients[1])
-  phi_est_IJ <- exp(fit_IJ$coefficients[2])
-  
-  offsets_IJ <- offsets_IJ_fn(Yarray = Yarray,
-                              rarray = rarray, 
-                              tarray = tarray,
-                              tau = rep(tau_est_IJ,dim(Yarray)[1]),
-                              phi = rep(phi_est_IJ,dim(Yarray)[1]))
-  end_IJ <- Sys.time()
+  # Offset for 
+  # tau_est_IJ <- exp(fit_IJ$coefficients[1])
+  # phi_est_IJ <- exp(fit_IJ$coefficients[2])
+  # 
+  # offsets_IJ <- offsets_IJ_fn(Yarray = Yarray,
+  #                             rarray = rarray, 
+  #                             tarray = tarray,
+  #                             tau = rep(tau_est_IJ,dim(Yarray)[1]),
+  #                             phi = rep(phi_est_IJ,dim(Yarray)[1]))
+  # 
   
   # ****************************************************************
   # Fit JOINT model
   # ****************************************************************
   
   start_PP <- Sys.time()
-  fit_PP <- fit_PP_fn(Yarray = Yarray, 
+  fit_PP <- fit_Jnt_fn(Yarray = Yarray, 
                       rarray = rarray, 
                       tarray = tarray,
-                      tau_inits = 0,
-                      phi_inits = 0
+                      X2 = X_phi
   )
+  end_PP <- Sys.time() # 6 min
   
-  tau_est_PP <- exp(fit_PP$coefficients[1])
-  phi_est_PP <- exp(fit_PP$coefficients[2])
+  # tau_est_PP <- exp(fit_PP$coefficients[1])
+  # phi_est_PP <- exp(fit_PP$coefficients[2])
+  # 
+  # offsets_PP <- offsets_PP_fn(Yarray = Yarray,
+  #                             rarray = rarray, 
+  #                             tarray = tarray,
+  #                             tau = rep(tau_est_PP,dim(Yarray)[1]),
+  #                             phi = rep(phi_est_PP,dim(Yarray)[1]))
+  # 
+  # 
   
-  offsets_PP <- offsets_PP_fn(Yarray = Yarray,
-                              rarray = rarray, 
-                              tarray = tarray,
-                              tau = rep(tau_est_PP,dim(Yarray)[1]),
-                              phi = rep(phi_est_PP,dim(Yarray)[1]))
-  end_PP <- Sys.time()
-  
-  
-  # ****************************************************************
-  # Fit INDEP-JOINT MIXTURE model with 3 parameters
-  # ****************************************************************
-  
-  start_IJPP <- Sys.time()
-  fit_IJPP <- fit_IJPP_fn(Yarray = Yarray, 
-                      rarray = rarray, 
-                      tarray = tarray,
-                      tau_inits = 0,
-                      phi_inits = 0,
-                      pA_inits = 0
-  )
-  
-  tau_est_IJPP <- exp(fit_IJPP$coefficients[1])
-  phi_est_IJPP <- exp(fit_IJPP$coefficients[2])
-  pA_est_IJPP <- plogis(fit_IJPP$coefficients[3])
-  
-  offsets_IJPP <- offsets_IJPP_fn(Yarray = Yarray,
-                              rarray = rarray, 
-                              tarray = tarray,
-                              tau = rep(tau_est_IJPP,dim(Yarray)[1]),
-                              phi = rep(phi_est_IJPP,dim(Yarray)[1]),
-                              pA = rep(pA_est_IJPP,dim(Yarray)[1]))
-  end_IJPP <- Sys.time()
-  
-  # ****************************************************************
-  # Fit INDEP-JOINT MIXTURE model with 5 parameters
-  # ****************************************************************
-  
-  start_IJPP5 <- Sys.time()
-  tries <- 0
-  loglik_IJPP5 <- -Inf
-  while(tries < 50){
-  fit_IJPP5 <- fit_IJPP5_fn(Yarray = Yarray, 
-                          rarray = rarray, 
-                          tarray = tarray,
-                          tau_A_inits = rnorm(1,log(tau_est_IJ),0.1),
-                          tau_B_inits = rnorm(1,log(tau_est_IJ),0.1),
-                          phi_A_inits = rnorm(1,log(phi_est_IJ),0.1),
-                          phi_B_inits = rnorm(1,log(phi_est_IJ),0.1),
-                          pA_inits = qlogis(runif(1,0.1,0.9))
-  )
-  if ("try-error" %in% class(fit_IJPP5)){
-    tries <- tries+1
-    next
-  }
-  
-  if (fit_IJPP5$convergence == 0){
-    if (fit_IJPP5$loglik > loglik_IJPP5){
-      fit_IJPP5_best <- fit_IJPP5
-      loglik_IJPP5 <- fit_IJPP5_best$loglik
-      print("Updating model")
-    }
-  }
-  tries <- tries+1
-  
-  }
-  
-  tau_A_est_IJPP5 <- exp(fit_IJPP5$coefficients[1])
-  tau_B_est_IJPP5 <- exp(fit_IJPP5$coefficients[2])
-  phi_A_est_IJPP5 <- exp(fit_IJPP5$coefficients[3])
-  phi_B_est_IJPP5 <- exp(fit_IJPP5$coefficients[4])
-  pA_est_IJPP5 <- plogis(fit_IJPP5$coefficients[5])
-  
-  offsets_IJPP5 <- offsets_IJPP5_fn(Yarray = Yarray,
-                                  rarray = rarray, 
-                                  tarray = tarray,
-                                  tau_A = rep(tau_A_est_IJPP5,dim(Yarray)[1]),
-                                  tau_B = rep(tau_B_est_IJPP5,dim(Yarray)[1]),
-                                  phi_A = rep(phi_A_est_IJPP5,dim(Yarray)[1]),
-                                  phi_B = rep(phi_B_est_IJPP5,dim(Yarray)[1]),
-                                  pA = rep(pA_est_IJPP5,dim(Yarray)[1]))
-  end_IJPP5 <- Sys.time()
-  
-  # ****************************************************************
-  # Save offsets and model fit summary for this species
-  # ****************************************************************
-  
-  sp_offsets <- data.frame(Species = sp,
-                           nsurvey = length(unique((subset(dat, Species == sp)$SurveyID))),
-                           
-                           convergence_IJ = fit_IJ$convergence,
-                           convergence_PP = fit_PP$convergence,
-                           convergence_IJPP = fit_IJPP$convergence,
-                           convergence_IJPP5 = fit_IJPP5$convergence,
-                           
-                           loglik_IJ = fit_IJ$loglik,
-                           loglik_PP = fit_PP$loglik,
-                           loglik_IJPP = fit_IJPP$loglik,
-                           loglik_IJPP5 = fit_IJPP5$loglik,
-                           
-                           off_IJ = offsets_IJ$offset_vec[1],
-                           off_PP = offsets_PP$offset_vec[1],
-                           off_IJPP = offsets_IJPP$offset_vec[1],
-                           off_IJPP5 = offsets_IJPP5$offset_vec[1])
-  
-  species_results_offsets <- rbind(species_results_offsets,sp_offsets)
-  
-  # ****************************************************************
-  # Save predictions of proportion of birds detected in each distance/time bin
-  # ****************************************************************
-  
-  Y <- Yarray[1,,] # Observed
-  p_IJ <- offsets_IJ$parray[1,,]
-  p_PP <- offsets_PP$parray[1,,]
-  p_IJPP <- offsets_IJPP$parray[1,,]
-  p_IJPP5 <- offsets_IJPP5$parray[1,,]
-  
-  colnames(Y) <- colnames(p_IJ) <- colnames(p_PP) <- colnames(p_IJPP) <- colnames(p_IJPP5) <- c("0-1 min","1-2 min","2-3 min","3-4 min","4-5 min","5-6 min","6-7 min","7-8 min","8-9 min","9-10 min")
-  rownames(Y) <- rownames(p_IJ) <- rownames(p_PP) <- rownames(p_IJPP) <- rownames(p_IJPP5) <- c("0-49 m","50-100 m", ">100 m")
-  
-  p_obs <- reshape2::melt(Y/sum(Y)) %>%
-    rename(Distance = Var1, Time = Var2, p = value) %>%
-    mutate(Species = sp,
-           Model = "Observed",
-           error = 0)
-  
-  p_IJ <- reshape2::melt(p_IJ) %>%
-    rename(Distance = Var1, Time = Var2, p = value) %>%
-    mutate(Species = sp,
-           Model = "IJ",
-           error = p_obs$p - p)
-  
-  p_PP <- reshape2::melt(p_PP) %>%
-    rename(Distance = Var1, Time = Var2, p = value) %>%
-    mutate(Species = sp,
-           Model = "PP",
-           error = p_obs$p - p)
-  
-  p_IJPP <- reshape2::melt(p_IJPP) %>%
-    rename(Distance = Var1, Time = Var2, p = value) %>%
-    mutate(Species = sp,
-           Model = "IJPP",
-           error = p_obs$p - p)
-  
-  p_IJPP5 <- reshape2::melt(p_IJPP5) %>%
-    rename(Distance = Var1, Time = Var2, p = value) %>%
-    mutate(Species = sp,
-           Model = "IJPP5",
-           error = p_obs$p - p)
-  
-  species_results_p <- rbind(species_results_p,
-                             p_obs,p_IJ,p_PP,p_IJPP,p_IJPP5)
-  
-  print(sp)
-  
+  # # ****************************************************************
+  # # Fit INDEP-JOINT MIXTURE model with 3 parameters
+  # # ****************************************************************
+  # 
+  # start_IJPP <- Sys.time()
+  # fit_IJPP <- fit_IJPP_fn(Yarray = Yarray, 
+  #                     rarray = rarray, 
+  #                     tarray = tarray,
+  #                     tau_inits = 0,
+  #                     phi_inits = 0,
+  #                     pA_inits = 0
+  # )
+  # 
+  # tau_est_IJPP <- exp(fit_IJPP$coefficients[1])
+  # phi_est_IJPP <- exp(fit_IJPP$coefficients[2])
+  # pA_est_IJPP <- plogis(fit_IJPP$coefficients[3])
+  # 
+  # offsets_IJPP <- offsets_IJPP_fn(Yarray = Yarray,
+  #                             rarray = rarray, 
+  #                             tarray = tarray,
+  #                             tau = rep(tau_est_IJPP,dim(Yarray)[1]),
+  #                             phi = rep(phi_est_IJPP,dim(Yarray)[1]),
+  #                             pA = rep(pA_est_IJPP,dim(Yarray)[1]))
+  # end_IJPP <- Sys.time()
+  # 
+  # # ****************************************************************
+  # # Fit INDEP-JOINT MIXTURE model with 5 parameters
+  # # ****************************************************************
+  # 
+  # start_IJPP5 <- Sys.time()
+  # tries <- 0
+  # loglik_IJPP5 <- -Inf
+  # while(tries < 50){
+  # fit_IJPP5 <- fit_IJPP5_fn(Yarray = Yarray, 
+  #                         rarray = rarray, 
+  #                         tarray = tarray,
+  #                         tau_A_inits = rnorm(1,log(tau_est_IJ),0.1),
+  #                         tau_B_inits = rnorm(1,log(tau_est_IJ),0.1),
+  #                         phi_A_inits = rnorm(1,log(phi_est_IJ),0.1),
+  #                         phi_B_inits = rnorm(1,log(phi_est_IJ),0.1),
+  #                         pA_inits = qlogis(runif(1,0.1,0.9))
+  # )
+  # if ("try-error" %in% class(fit_IJPP5)){
+  #   tries <- tries+1
+  #   next
+  # }
+  # 
+  # if (fit_IJPP5$convergence == 0){
+  #   if (fit_IJPP5$loglik > loglik_IJPP5){
+  #     fit_IJPP5_best <- fit_IJPP5
+  #     loglik_IJPP5 <- fit_IJPP5_best$loglik
+  #     print("Updating model")
+  #   }
+  # }
+  # tries <- tries+1
+  # 
+  # }
+  # 
+  # tau_A_est_IJPP5 <- exp(fit_IJPP5$coefficients[1])
+  # tau_B_est_IJPP5 <- exp(fit_IJPP5$coefficients[2])
+  # phi_A_est_IJPP5 <- exp(fit_IJPP5$coefficients[3])
+  # phi_B_est_IJPP5 <- exp(fit_IJPP5$coefficients[4])
+  # pA_est_IJPP5 <- plogis(fit_IJPP5$coefficients[5])
+  # 
+  # offsets_IJPP5 <- offsets_IJPP5_fn(Yarray = Yarray,
+  #                                 rarray = rarray, 
+  #                                 tarray = tarray,
+  #                                 tau_A = rep(tau_A_est_IJPP5,dim(Yarray)[1]),
+  #                                 tau_B = rep(tau_B_est_IJPP5,dim(Yarray)[1]),
+  #                                 phi_A = rep(phi_A_est_IJPP5,dim(Yarray)[1]),
+  #                                 phi_B = rep(phi_B_est_IJPP5,dim(Yarray)[1]),
+  #                                 pA = rep(pA_est_IJPP5,dim(Yarray)[1]))
+  # end_IJPP5 <- Sys.time()
+  # 
+  # # ****************************************************************
+  # # Save offsets and model fit summary for this species
+  # # ****************************************************************
+  # 
+  # sp_offsets <- data.frame(Species = sp,
+  #                          nsurvey = length(unique((subset(dat, Species == sp)$SurveyID))),
+  #                          
+  #                          convergence_IJ = fit_IJ$convergence,
+  #                          convergence_PP = fit_PP$convergence,
+  #                          convergence_IJPP = fit_IJPP$convergence,
+  #                          convergence_IJPP5 = fit_IJPP5$convergence,
+  #                          
+  #                          loglik_IJ = fit_IJ$loglik,
+  #                          loglik_PP = fit_PP$loglik,
+  #                          loglik_IJPP = fit_IJPP$loglik,
+  #                          loglik_IJPP5 = fit_IJPP5$loglik,
+  #                          
+  #                          off_IJ = offsets_IJ$offset_vec[1],
+  #                          off_PP = offsets_PP$offset_vec[1],
+  #                          off_IJPP = offsets_IJPP$offset_vec[1],
+  #                          off_IJPP5 = offsets_IJPP5$offset_vec[1])
+  # 
+  # species_results_offsets <- rbind(species_results_offsets,sp_offsets)
+  # 
+  # # ****************************************************************
+  # # Save predictions of proportion of birds detected in each distance/time bin
+  # # ****************************************************************
+  # 
+  # Y <- Yarray[1,,] # Observed
+  # p_IJ <- offsets_IJ$parray[1,,]
+  # p_PP <- offsets_PP$parray[1,,]
+  # p_IJPP <- offsets_IJPP$parray[1,,]
+  # p_IJPP5 <- offsets_IJPP5$parray[1,,]
+  # 
+  # colnames(Y) <- colnames(p_IJ) <- colnames(p_PP) <- colnames(p_IJPP) <- colnames(p_IJPP5) <- c("0-1 min","1-2 min","2-3 min","3-4 min","4-5 min","5-6 min","6-7 min","7-8 min","8-9 min","9-10 min")
+  # rownames(Y) <- rownames(p_IJ) <- rownames(p_PP) <- rownames(p_IJPP) <- rownames(p_IJPP5) <- c("0-49 m","50-100 m", ">100 m")
+  # 
+  # p_obs <- reshape2::melt(Y/sum(Y)) %>%
+  #   rename(Distance = Var1, Time = Var2, p = value) %>%
+  #   mutate(Species = sp,
+  #          Model = "Observed",
+  #          error = 0)
+  # 
+  # p_IJ <- reshape2::melt(p_IJ) %>%
+  #   rename(Distance = Var1, Time = Var2, p = value) %>%
+  #   mutate(Species = sp,
+  #          Model = "IJ",
+  #          error = p_obs$p - p)
+  # 
+  # p_PP <- reshape2::melt(p_PP) %>%
+  #   rename(Distance = Var1, Time = Var2, p = value) %>%
+  #   mutate(Species = sp,
+  #          Model = "PP",
+  #          error = p_obs$p - p)
+  # 
+  # p_IJPP <- reshape2::melt(p_IJPP) %>%
+  #   rename(Distance = Var1, Time = Var2, p = value) %>%
+  #   mutate(Species = sp,
+  #          Model = "IJPP",
+  #          error = p_obs$p - p)
+  # 
+  # p_IJPP5 <- reshape2::melt(p_IJPP5) %>%
+  #   rename(Distance = Var1, Time = Var2, p = value) %>%
+  #   mutate(Species = sp,
+  #          Model = "IJPP5",
+  #          error = p_obs$p - p)
+  # 
+  # species_results_p <- rbind(species_results_p,
+  #                            p_obs,p_IJ,p_PP,p_IJPP,p_IJPP5)
+  # 
+  # print(sp)
+  # 
 }
 
 # # ****************************************************************

@@ -113,6 +113,10 @@ ARU_surveys <- survey_info$SurveyID[survey_info$SurveyType == "ARU"]
 # Date and hours-since-sunrise for each survey
 # -------------------------------------------------------------
 
+survey_info$Sunrise <- suntools::sunriset(crds = st_transform(survey_info,crs = 4326),
+                                          dateTime = all_surveys$Date_Time,
+                                          direction = c("sunrise"),
+                                          POSIXct.out = TRUE)$time
 
 
 # -------------------------------------------------------------
@@ -126,7 +130,7 @@ for (k in 1:nsurvey){
   
   dat_survey <- subset(dat, SurveyID == k)
   
-  max_dur <- survey_info$Duration[survey_info$SurveyID == k][1]
+  max_dur <- survey_info$Duration[survey_info$SurveyID == k]
   
   tarray[k,1:max_dur] <- seq(1,max_dur)
   rarray[k,1] <- Inf
@@ -426,62 +430,49 @@ for (sp in species_to_include$Species){
   # ****************************************************************
   # Save predictions of proportion of birds detected in each distance/time bin
   # ****************************************************************
-
-  Y <- Yarray[1,,] # Observed
-  p_Ind <- offsets_Ind$parray[1,,]
-  p_Jnt <- offsets_Jnt$parray[1,,]
-  p_IndMix4 <- offsets_IndMix4$parray[1,,]
-  p_JntMix4 <- offsets_JntMix4$parray[1,,]
-  p_IndMix5 <- offsets_IndMix5$parray[1,,]
-  p_JntMix5 <- offsets_JntMix5$parray[1,,]
-  
-  colnames(Y) <- colnames(p_Ind) <- colnames(p_Jnt) <- colnames(p_IndMix4) <- colnames(p_JntMix4) <- colnames(p_IndMix5) <- colnames(p_JntMix5)<- c("0-1 min","1-2 min","2-3 min","3-4 min","4-5 min","5-6 min","6-7 min","7-8 min","8-9 min","9-10 min")
-  rownames(Y) <- rownames(p_Ind) <- rownames(p_Jnt) <- rownames(p_IndMix4) <- rownames(p_JntMix4) <- rownames(p_IndMix5) <- rownames(p_JntMix5) <- c("0-49 m","50-100 m", ">100 m")
-
-  p_obs <- reshape2::melt(Y/sum(Y)) %>%
-    rename(Distance = Var1, Time = Var2, p = value) %>%
-    mutate(Species = sp,
-           Model = "Observed",
-           error = 0)
-
-  p_Ind <- reshape2::melt(p_Ind) %>%
-    rename(Distance = Var1, Time = Var2, p = value) %>%
-    mutate(Species = sp,
-           Model = "Ind",
-           error = p_obs$p - p)
-
-  p_Jnt <- reshape2::melt(p_Jnt) %>%
-    rename(Distance = Var1, Time = Var2, p = value) %>%
-    mutate(Species = sp,
-           Model = "Jnt",
-           error = p_obs$p - p)
-
-  p_IndMix4 <- reshape2::melt(p_IndMix4) %>%
-    rename(Distance = Var1, Time = Var2, p = value) %>%
-    mutate(Species = sp,
-           Model = "IndMix4",
-           error = p_obs$p - p)
-
-  p_JntMix4 <- reshape2::melt(p_JntMix4) %>%
-    rename(Distance = Var1, Time = Var2, p = value) %>%
-    mutate(Species = sp,
-           Model = "JntMix4",
-           error = p_obs$p - p)
-
-  p_IndMix5 <- reshape2::melt(p_IndMix5) %>%
-    rename(Distance = Var1, Time = Var2, p = value) %>%
-    mutate(Species = sp,
-           Model = "IndMix5",
-           error = p_obs$p - p)
-  
-  p_JntMix5 <- reshape2::melt(p_JntMix5) %>%
-    rename(Distance = Var1, Time = Var2, p = value) %>%
-    mutate(Species = sp,
-           Model = "JntMix5",
-           error = p_obs$p - p)
-  species_results_p <- rbind(species_results_p,
-                             p_obs,p_Ind,p_Jnt,p_JntMix4,p_IndMix4,p_JntMix5,p_IndMix5)
-
+  # 
+  # Y <- Yarray[1,,] # Observed
+  # p_Ind <- offsets_Ind$parray[1,,]
+  # p_Jnt <- offsets_Jnt$parray[1,,]
+  # p_IndMix <- offsets_IndMix$parray[1,,]
+  # p_JntMix <- offsets_JntMix$parray[1,,]
+  # 
+  # colnames(Y) <- colnames(p_Ind) <- colnames(p_Jnt) <- colnames(p_IndMix) <- colnames(p_JntMix) <- c("0-1 min","1-2 min","2-3 min","3-4 min","4-5 min","5-6 min","6-7 min","7-8 min","8-9 min","9-10 min")
+  # rownames(Y) <- rownames(p_Ind) <- rownames(p_Jnt) <- rownames(p_IndMix) <- rownames(p_JntMix) <- c("0-49 m","50-100 m", ">100 m")
+  # 
+  # p_obs <- reshape2::melt(Y/sum(Y)) %>%
+  #   rename(Distance = Var1, Time = Var2, p = value) %>%
+  #   mutate(Species = sp,
+  #          Model = "Observed",
+  #          error = 0)
+  # 
+  # p_Ind <- reshape2::melt(p_Ind) %>%
+  #   rename(Distance = Var1, Time = Var2, p = value) %>%
+  #   mutate(Species = sp,
+  #          Model = "Ind",
+  #          error = p_obs$p - p)
+  # 
+  # p_Jnt <- reshape2::melt(p_Jnt) %>%
+  #   rename(Distance = Var1, Time = Var2, p = value) %>%
+  #   mutate(Species = sp,
+  #          Model = "Jnt",
+  #          error = p_obs$p - p)
+  # 
+  # p_IndMix <- reshape2::melt(p_IndMix) %>%
+  #   rename(Distance = Var1, Time = Var2, p = value) %>%
+  #   mutate(Species = sp,
+  #          Model = "IndMix",
+  #          error = p_obs$p - p)
+  # 
+  # p_JntMix <- reshape2::melt(p_JntMix) %>%
+  #   rename(Distance = Var1, Time = Var2, p = value) %>%
+  #   mutate(Species = sp,
+  #          Model = "JntMix",
+  #          error = p_obs$p - p)
+  # 
+  # species_results_p <- rbind(species_results_p,
+  #                            p_obs,p_Ind,p_Jnt,p_JntMix,p_IndMix,p_JntMix)
+  # 
   print(sp)
   
 }
@@ -489,7 +480,6 @@ for (sp in species_to_include$Species){
 # ****************************************************************
 # Plot offsets, and log likelihoods of each model
 # ****************************************************************
-
 models <- c("Ind","Jnt","IndMix4","JntMix4","IndMix5","JntMix5")
 sp_results$Best = NA
 
@@ -610,6 +600,3 @@ p_best_plot <- ggplot(best_model_p,
                        name = "Error\n(observed - expected)")+
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))+
   ggtitle("Best Model")
-
-p_Ind_plot
-p_best_plot
