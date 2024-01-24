@@ -6,6 +6,16 @@ Goal is to critically evaluate 'goodness-of-fit' of standard distance and time-r
 
 **Notes**
 
+*2024-01-24*
+1)	Elly found that ARUs tend to result in much higher cue rate estimates, compared to human point counts.  This could be due to humans being unable to bin detections in time properly (e.g., being overwhelmed by a busy dawn chorus).
+a.	Action: Check whether this occurs in paired human/ARU data, based on Steve’s SK dataset
+
+2)	Heterogeneity in bird behaviour would result in biased estimates of offsets and density.  E.g., if some birds call much less frequently than others, or are much less detectable.  Could also occur if there is unmodeled heterogeneity (e.g., in habitat)
+a.	Action: Evaluate if standard QPAD (which does not attempt to estimate a mixture of bird types) fits the data adequately, and if not, whether a mixture model is more appropriate.  Do mixture models fit better than non-mixture models?
+
+3)	Joint vs independent – are first cues always detected?
+
+
 *2023-11-22*
 - "current" analysis is in Analysis folder
 - goodness of fit of standard models seems poor (many extra birds are detected in the first minute compared to predictions, and then subsequently less)
