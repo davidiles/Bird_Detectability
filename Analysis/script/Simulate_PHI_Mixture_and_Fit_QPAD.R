@@ -20,8 +20,9 @@ result_df <- expand.grid(sim_rep = seq(1,100),
                          phi_B = 0.1,
                          
                          # EDR of birds in each group
-                         tau_B = 1,
+                         
                          tau_A = 1,
+                         tau_B = 1,
                          
                          # Proportion of birds in each group
                          pA = c(0,0.5,1),
@@ -239,6 +240,8 @@ for (i in 1:nrow(result_df)){
   A_hat = pi*tau_MLE^2
   p_hat = 1-exp(-max(tint)*phi_MLE)
   D_hat <- sum(Y)/(A_hat*p_hat)
+  
+  barplot(colSums(Y))
   
   # Save results
   result_df$tau_est[i] <- tau_MLE

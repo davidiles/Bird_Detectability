@@ -262,7 +262,7 @@ for (i in 1:nrow(result_df)){
     ylab("Population Density\n\n(Birds/1000km^2)")+
     xlab("phi_B")+
     ggtitle(paste0("Simulation Results\nphi_A = ",phi_A))+
-
+    scale_y_continuous(trans="log10")+
     facet_grid(pA_label~tau_B_label)+
     theme_bw()
 

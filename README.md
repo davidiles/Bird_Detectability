@@ -1,7 +1,13 @@
 # Bird_Detectability
- Development of new approaches for landbird detectability modeling from human point counts.
+This repo contains code to test approaches for landbird detectability modeling.
  
-Goal is to critically evaluate 'goodness-of-fit' of standard distance and time-removal modeling, and explore alternative parameterizations that may provide better fit.
+Over-arching goal is to critically evaluate 'goodness-of-fit' of standard distance and time-removal modeling, and the sensitivity of model outputs to violations of model assumptions.  For example, 
+
+Secondary goal: explore alternative parameterizations that may provide better fit.
+
+## Investigation 1: Do cue rate estimates differ when estimated from ARUs and humans
+
+
 
 
 **Notes**

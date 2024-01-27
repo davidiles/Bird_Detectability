@@ -81,7 +81,7 @@ species_to_include <- species_totals %>%
   subset(SurveyType == "HUM") %>%
   rename(Species = Species) %>%
   arrange(desc(TotalCount)) %>%
-  subset(TotalCount > 500)
+  subset(TotalCount > 100)
 
 dat <- subset(dat, Species %in% species_to_include$Species)
 
@@ -193,25 +193,98 @@ for (sp in species_to_include$Species){
     
   }
   
-  Y_removal <- matrix(colSums(Yarray[1,,]),1)
   
   # Fit removal model
+  Y_removal <- matrix(colSums(Yarray[1,,]),1)
   D_removal <- matrix(sort(unique(dat$TimeBin)),1)
   nbins_removal <- length(Y_removal)
   fit.p <- detect::cmulti.fit(Y_removal,D_removal, type = "rem")
   phi_HUM = exp(fit.p$coefficients)
   
+  # Fit distance model
+  Y_distance <- matrix(rowSums(Yarray[1,,]),1)
+  D_distance <- matrix(c(0.5,1,Inf),1)
+  nbins_distance <- length(Y_distance)
+  fit.q <- detect::cmulti.fit(Y_distance,D_distance, type = "dis")
+  tau_HUM = exp(fit.q$coefficients)
+  
+  # **********************************************************************
+  # Expected effects on density
+  # **********************************************************************
+  
+  # Estimate density for each species
+  A <- pi*tau_HUM^2 # area sampled by unlimited distance survey
+  
+  p_ARU <- 1-exp(-10*phi_ARU) # 10 minute survey
+  D_ARU <- 1/(A*p_ARU)
+  
+  p_HUM <- 1-exp(-10*phi_HUM) # 10 minute survey
+  D_HUM <- 1/(A*p_HUM)
+  
+  print(sp)
   results <- rbind(results,data.frame(Species = sp,
+                                      tau = tau_HUM,
+                                      
+                                      phi_ARU = phi_ARU,
                                       phi_HUM = phi_HUM,
-                                      phi_ARU = phi_ARU))
+                                      
+                                      D_ARU = D_ARU,
+                                      D_HUM = D_HUM))
 }
 
-lim = range(results[,c(2,3)])
-ggplot(results, aes(x = phi_HUM, y = phi_ARU, label = Species))+
+saveRDS(results,"../results/results_HUM_ARU.RDS")
+
+lim = range(results[,c("phi_ARU","phi_HUM")])
+phi_comparison <- ggplot(results, aes(x = phi_HUM, y = phi_ARU, label = Species))+
   geom_abline(slope=1,intercept=0)+
   geom_point(col = "gray70")+
   geom_text_repel()+
   coord_cartesian(xlim=lim,ylim=lim)+
+  xlab("Phi (Human)")+
+  ylab("Phi (ARU)")+
+  ggtitle("Comparison of cue rate (phi) estimated from human or ARU surveys")+
   theme_bw()
+phi_comparison
 
-# Key result: phi is higher when estimated from ARU
+png("../results/phi_comparison.png", units="in", width = 7, height = 7, res = 600)
+print(phi_comparison)
+dev.off()
+
+# Not working yet!  Calculate percent change in D
+results$percent_change_density <- 100*(results$D_ARU - results$D_HUM)/results$D_HUM
+results <- results %>% arrange(percent_change_density)
+results$Species <- factor(results$Species, levels = results$Species)
+D_comparison <- ggplot(results, 
+                       aes(x = percent_change_density, y = Species, label = Species))+
+  
+  geom_bar(stat = "identity")+
+  
+  xlab("Percent Difference in Density Estimate")+
+  ylab("Species")+
+  ggtitle("Comparison of density estimates\nwhen phi is estimated from ARU data")+
+  theme_bw()
+D_comparison
+
+png("../results/Density_comparison.png", units="in", width = 6, height = 7, res = 600)
+print(D_comparison)
+dev.off()
+
+# Key result: phi is higher when estimated from ARU, 
+#             even in paired surveys
+
+
+
+# Use estimates of tau and phi to evaluate expected effects on density estimates
+rint <- c(0.5,1,Inf)
+tint <- seq(1,5)
+nrint <- length(rint)
+ntint <- length(tint)
+
+# Estimate density for each species
+N_detected <- 1
+tau = XX
+phi = YY
+A_hat = pi*tau^2
+p_hat = 1-exp(-10*phi) # 10 minute survey
+D_hat <- N_detected/(A_hat*p_hat)
+D_hat
