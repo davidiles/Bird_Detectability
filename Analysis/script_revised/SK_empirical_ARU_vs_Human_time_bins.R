@@ -86,6 +86,12 @@ species_to_include <- species_totals %>%
 dat <- subset(dat, Species %in% species_to_include$Species)
 
 # -------------------------------------------------------------
+# Create 2-minute and 5-minute bins
+# -------------------------------------------------------------
+dat$TimeBin_2 <- ceiling(dat$TimeBin/2)
+dat$TimeBin_5 <- ceiling(dat$TimeBin/5)
+
+# -------------------------------------------------------------
 # Survey information
 # -------------------------------------------------------------
 
@@ -102,26 +108,6 @@ table(survey_info[,c("Duration","SurveyType")])
 HUM_surveys <- survey_info$SurveyID[survey_info$SurveyType == "HUM"]
 ARU_surveys <- survey_info$SurveyID[survey_info$SurveyType == "ARU"]
 
-# -------------------------------------------------------------
-# Create rarray and tarrays
-# -------------------------------------------------------------
-
-tarray <- array(NA,dim = c(nsurvey,length(unique(dat$TimeBin))),
-                    dimnames = list(NULL,sort(unique(dat$TimeBin))))
-rarray <- array(NA,dim = c(nsurvey,3))
-
-for (k in 1:nsurvey){
-  
-  dat_survey <- subset(dat, SurveyID == k)
-  
-  max_dur <- survey_info$Duration[survey_info$SurveyID == k]
-  
-  tarray[k,1:max_dur] <- seq(1,max_dur)
-  rarray[k,1] <- Inf
-  if (max(dat_survey$nDistBin) == 3) rarray[k,] <- c(0.5,1,Inf)
-  
-}
-
 # **********************************************************************
 # **********************************************************************
 # Loop through species and conduct analyses
@@ -132,7 +118,7 @@ results <- data.frame()
 for (sp in species_to_include$Species){
   
   # **********************************************************************
-  # Fit removal model to ARU data
+  # Fit removal model to ARU data with 1-minute bins
   # **********************************************************************
   
   # Generate Yarray for this species
@@ -163,20 +149,20 @@ for (sp in species_to_include$Species){
   # Fit removal model
   D_removal <- matrix(sort(unique(dat$TimeBin)),1)
   nbins_removal <- length(Y_removal)
-  fit.p <- detect::cmulti.fit(Y_removal,D_removal, type = "rem")
-  phi_ARU = exp(fit.p$coefficients)
+  fit_p <- detect::cmulti.fit(Y_removal,D_removal, type = "rem")
+  phi_ARU_1 = exp(fit_p$coefficients)
   
   # **********************************************************************
-  # Fit model to HUMAN data
+  # Fit removal model to ARU data with 2-minute bins
   # **********************************************************************
   
   # Generate Yarray for this species
-  Yarray <- array(0,dim=c(1,3,10))
+  Yarray <- array(0,dim=c(1,1,10/2))
   
   # Fill Yarray with counts
-  for (k in 1:length(HUM_surveys)){
+  for (k in 1:length(ARU_surveys)){
     
-    id = HUM_surveys[k]
+    id = ARU_surveys[k]
     dat_survey <- subset(dat, SurveyID == id)
     
     max_dur <- survey_info$Duration[survey_info$SurveyID == id]
@@ -188,104 +174,66 @@ for (sp in species_to_include$Species){
     if (nrow(dat_survey_sp)==0) next
     
     for (i in 1:nrow(dat_survey_sp)){
-      Yarray[1,dat_survey_sp$DistBin[i],dat_survey_sp$TimeBin[i]] <- Yarray[1,dat_survey_sp$DistBin[i],dat_survey_sp$TimeBin[i]] + dat_survey_sp$Count[i]
+      Yarray[1,1,dat_survey_sp$TimeBin_2[i]] <- Yarray[1,1,dat_survey_sp$TimeBin_2[i]] + dat_survey_sp$Count[i]
     }
     
   }
   
+  Y_removal <- matrix(Yarray[1,1,],1)
   
   # Fit removal model
-  Y_removal <- matrix(colSums(Yarray[1,,]),1)
-  D_removal <- matrix(sort(unique(dat$TimeBin)),1)
+  D_removal <- matrix(seq(2,10,2),1)
   nbins_removal <- length(Y_removal)
-  fit.p <- detect::cmulti.fit(Y_removal,D_removal, type = "rem")
-  phi_HUM = exp(fit.p$coefficients)
-  
-  # Fit distance model
-  Y_distance <- matrix(rowSums(Yarray[1,,]),1)
-  D_distance <- matrix(c(0.5,1,Inf),1)
-  nbins_distance <- length(Y_distance)
-  fit.q <- detect::cmulti.fit(Y_distance,D_distance, type = "dis")
-  tau_HUM = exp(fit.q$coefficients)
+  fit_p <- detect::cmulti.fit(Y_removal,D_removal, type = "rem")
+  phi_ARU_2 = exp(fit_p$coefficients)
   
   # **********************************************************************
-  # Expected effects on density
+  # Fit removal model to ARU data with 5-minute bins
   # **********************************************************************
   
-  # Estimate density for each species
-  A <- pi*tau_HUM^2 # area sampled by unlimited distance survey
+  # Generate Yarray for this species
+  Yarray <- array(0,dim=c(1,1,10/5))
   
-  p_ARU <- 1-exp(-10*phi_ARU) # 10 minute survey
-  D_ARU <- 1/(A*p_ARU)
+  # Fill Yarray with counts
+  for (k in 1:length(ARU_surveys)){
+    
+    id = ARU_surveys[k]
+    dat_survey <- subset(dat, SurveyID == id)
+    
+    max_dur <- survey_info$Duration[survey_info$SurveyID == id]
+    
+    # Select data for this species
+    dat_survey_sp <- subset(dat_survey, Species == sp)
+    
+    # If this survey did not detect the species, skip
+    if (nrow(dat_survey_sp)==0) next
+    
+    for (i in 1:nrow(dat_survey_sp)){
+      Yarray[1,1,dat_survey_sp$TimeBin_5[i]] <- Yarray[1,1,dat_survey_sp$TimeBin_5[i]] + dat_survey_sp$Count[i]
+    }
+    
+  }
   
-  p_HUM <- 1-exp(-10*phi_HUM) # 10 minute survey
-  D_HUM <- 1/(A*p_HUM)
+  Y_removal <- matrix(Yarray[1,1,],1)
   
-  print(sp)
+  # Fit removal model
+  D_removal <- matrix(seq(5,10,5),1)
+  nbins_removal <- length(Y_removal)
+  fit_p <- detect::cmulti.fit(Y_removal,D_removal, type = "rem")
+  phi_ARU_5 = exp(fit_p$coefficients)
   
   results <- rbind(results,data.frame(Species = sp,
-                                      tau = tau_HUM,
-                                      
-                                      phi_ARU = phi_ARU,
-                                      phi_HUM = phi_HUM,
-                                      
-                                      D_ARU = D_ARU,
-                                      D_HUM = D_HUM))
+                                      time_bin_duration = c(1,2,5),
+                                      phi_est = c(phi_ARU_1,phi_ARU_2,phi_ARU_5)))
+  print(sp)
+  
+  phi_comparison <- ggplot(results, aes(x = time_bin_duration, y = phi_est, col = Species))+
+    geom_line()+
+    scale_color_manual(values = rep("black",length(unique(results$Species))),guide = "none")+
+    ggtitle("Comparison of cue rate (phi) estimated using different time bin lengths")+
+    theme_bw()+
+    geom_text(data = subset(results, time_bin_duration == 5), aes(x = time_bin_duration+0.1, y = phi_est, label = Species), size = 2)+
+    scale_y_continuous(trans = "log10")
+  print(phi_comparison)
 }
 
-saveRDS(results,"../results/results_HUM_ARU.RDS")
-
-lim = range(results[,c("phi_ARU","phi_HUM")])
-phi_comparison <- ggplot(results, aes(x = phi_HUM, y = phi_ARU, label = Species))+
-  geom_abline(slope=1,intercept=0)+
-  geom_point(col = "gray70")+
-  geom_text_repel()+
-  coord_cartesian(xlim=lim,ylim=lim)+
-  xlab("Phi (Human)")+
-  ylab("Phi (ARU)")+
-  ggtitle("Comparison of cue rate (phi) estimated from human or ARU surveys")+
-  theme_bw()
-phi_comparison
-
-png("../results/phi_comparison.png", units="in", width = 7, height = 7, res = 600)
-print(phi_comparison)
-dev.off()
-
-# Not working yet!  Calculate percent change in D
-results$percent_change_density <- 100*(results$D_ARU - results$D_HUM)/results$D_HUM
-results <- results %>% arrange(percent_change_density)
-results$Species <- factor(results$Species, levels = results$Species)
-D_comparison <- ggplot(results, 
-                       aes(x = percent_change_density, y = Species, label = Species))+
-  
-  geom_bar(stat = "identity")+
-  
-  xlab("Percent Difference in Density Estimate")+
-  ylab("Species")+
-  ggtitle("Comparison of density estimates\nwhen phi is estimated from ARU data")+
-  theme_bw()
-D_comparison
-
-png("../results/Density_comparison.png", units="in", width = 6, height = 7, res = 600)
-print(D_comparison)
-dev.off()
-
-# Key result: phi is higher when estimated from ARU, 
-#             even in paired surveys
-
-
-
-# Use estimates of tau and phi to evaluate expected effects on density estimates
-rint <- c(0.5,1,Inf)
-tint <- seq(1,5)
-nrint <- length(rint)
-ntint <- length(tint)
-
-# Estimate density for each species
-N_detected <- 1
-tau = XX
-phi = YY
-A_hat = pi*tau^2
-p_hat = 1-exp(-10*phi) # 10 minute survey
-D_hat <- N_detected/(A_hat*p_hat)
-D_hat
